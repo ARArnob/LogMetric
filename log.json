@@ -1,0 +1,8 @@
+{
+  "id": "win-test-uuid-001",
+  "timestamp": 1787123984000,
+  "level": "ERROR",
+  "serviceName": "payment-gateway",
+  "message": "Transaction failure: connection timeout on bank gateway pool 4",
+  "userId": "usr_9981"
+}
