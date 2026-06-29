@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LogMetric UI
 
-## Getting Started
+A modern, dark-themed observability dashboard for the LogMetric log telemetry engine.
 
-First, run the development server:
+## Features
+
+- **Dark terminal aesthetic** — purpose-built for a log monitoring tool
+- **Live log stream** with level filtering (ERROR / WARN / INFO / DEBUG)
+- **Demo mode** — auto-generates realistic mock log data when backend is unreachable
+- **Pause / Resume** stream control
+- **CSV export** for log data
+- **Fully responsive** — works on mobile and desktop
+
+## Pages
+
+| Route | Description |
+|-------|-------------|
+| `/` | Landing page with hero, features, and architecture diagram |
+| `/dashboard` | Live telemetry dashboard with stats cards and log stream |
+| `/signin` | Sign-in form (links to dashboard for demo) |
+| `/signup` | Registration form (links to dashboard for demo) |
+
+## Local Development
 
 ```bash
+cd logmetric-ui
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploying to Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Option A — Vercel CLI
 
-## Learn More
+```bash
+npm install -g vercel
+cd logmetric-ui
+vercel
+```
 
-To learn more about Next.js, take a look at the following resources:
+Follow the prompts. On first deploy, Vercel will ask about framework detection — it will auto-detect Next.js.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Option B — GitHub Import
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Push this folder (or the whole repo) to GitHub
+2. Go to [vercel.com/new](https://vercel.com/new)
+3. Import the repository
+4. Set **Root Directory** to `logmetric-ui`
+5. Click **Deploy**
 
-## Deploy on Vercel
+### Environment Variables (optional)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+In Vercel project settings → Environment Variables:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Name | Value |
+|------|-------|
+| `NEXT_PUBLIC_API_URL` | `https://your-backend.com/api` |
+
+If not set, the dashboard runs in **demo mode** with simulated live log data.
+
+## Tech Stack
+
+- **Next.js 15** (App Router)
+- **TypeScript**
+- **Tailwind CSS v4**
+- **Lucide React** icons
