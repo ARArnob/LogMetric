@@ -14,6 +14,38 @@
 //    }
 //}
 
+//package org.example.logmetricapi.config;
+//
+//import org.springframework.beans.factory.annotation.Value;
+//import org.springframework.context.annotation.Configuration;
+//import org.springframework.data.elasticsearch.client.ClientConfiguration;
+//import org.springframework.data.elasticsearch.client.elc.ElasticsearchConfiguration;
+//import org.springframework.data.elasticsearch.repository.config.EnableElasticsearchRepositories;
+//import org.springframework.data.elasticsearch.support.HttpHeaders;
+//
+//@Configuration
+//@EnableElasticsearchRepositories(basePackages = "org.example.logmetricapi")
+//public class ElasticsearchConfig extends ElasticsearchConfiguration {
+//    @Value("${ELASTIC_API_KEY:}")
+//    private String elasticApiKey;
+//
+//    @Value("${ELASTIC_URL}")
+//    private String elasticUrl;
+//    @Override
+//    public ClientConfiguration clientConfiguration(){
+//        HttpHeaders headers = new HttpHeaders();
+//        // PASTE YOUR REAL COPY-PASTED TOKEN STRING HERE:
+//        headers.add("Authorization", "ApiKey " + elasticApiKey);
+//
+//        return ClientConfiguration.builder()
+//                // PASTE YOUR REAL COPIED ENDPOINT URL HERE (Without https://, ending in :443):
+//                .connectedTo(elasticUrl)
+//                .usingSsl()
+//                .withDefaultHeaders(headers)
+//                .build();
+//    }
+//}
+
 package org.example.logmetricapi.config;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -26,22 +58,32 @@ import org.springframework.data.elasticsearch.support.HttpHeaders;
 @Configuration
 @EnableElasticsearchRepositories(basePackages = "org.example.logmetricapi")
 public class ElasticsearchConfig extends ElasticsearchConfiguration {
-    @Value("${ELASTIC_API_KEY}")
+
+    @Value("${ELASTIC_API_KEY:}")
     private String elasticApiKey;
 
-    @Value("${ELASTIC_URL}")
+    // Default to local Docker container if no URL is provided
+    @Value("${ELASTIC_URL:localhost:9200}")
     private String elasticUrl;
-    @Override
-    public ClientConfiguration clientConfiguration(){
-        HttpHeaders headers = new HttpHeaders();
-        // PASTE YOUR REAL COPY-PASTED TOKEN STRING HERE:
-        headers.add("Authorization", "ApiKey " + elasticApiKey);
 
+    @Override
+    public ClientConfiguration clientConfiguration() {
+
+        // CLOUD MODE: If an API key exists, apply SSL and Authorization headers
+        if (elasticApiKey != null && !elasticApiKey.trim().isEmpty()) {
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Authorization", "ApiKey " + elasticApiKey);
+
+            return ClientConfiguration.builder()
+                    .connectedTo(elasticUrl)
+                    .usingSsl()
+                    .withDefaultHeaders(headers)
+                    .build();
+        }
+
+        // LOCAL MODE: If no API key, connect in plaintext for local Docker
         return ClientConfiguration.builder()
-                // PASTE YOUR REAL COPIED ENDPOINT URL HERE (Without https://, ending in :443):
                 .connectedTo(elasticUrl)
-                .usingSsl()
-                .withDefaultHeaders(headers)
                 .build();
     }
 }

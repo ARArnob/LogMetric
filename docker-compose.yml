@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # 1. Relational Database (PostgreSQL)
+  postgres:
+    image: postgres:15-alpine
+    container_name: logmetric-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: logmetric
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. Message Broker (RabbitMQ + Management Console)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: logmetric-rabbitmq
+    ports:
+      - "5672:5672"    # AMQP Protocol
+      - "15672:15672"  # Web Dashboard
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  # 3. Search Engine (Elasticsearch)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: logmetric-elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false   # Disabled security for zero-friction local development
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m" # Prevents RAM overconsumption on team laptops
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+volumes:
+  postgres_data:
+  es_data:
