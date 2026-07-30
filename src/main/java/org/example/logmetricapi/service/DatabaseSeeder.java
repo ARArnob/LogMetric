@@ -14,7 +14,7 @@ public class DatabaseSeeder implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         if (repository.count() == 0) {
-            ClientApplication client = new ClientApplication("payment-service", java.util.UUID.randomUUID().toString());
+            ClientApplication client = new ClientApplication("payment-service", "logmetric-dev-key-99999");
             System.out.println(">>> SEEDED API KEY: " + client.getApiKey());
             repository.save(client);
         }
