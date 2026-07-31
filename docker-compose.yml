@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   # 1. Relational Database (PostgreSQL)
@@ -33,8 +32,8 @@ services:
       - "9200:9200"
     environment:
       - discovery.type=single-node
-      - xpack.security.enabled=false   # Disabled security for zero-friction local development
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m" # Prevents RAM overconsumption on team laptops
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     volumes:
       - es_data:/usr/share/elasticsearch/data
 

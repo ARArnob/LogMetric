@@ -1,5 +1,6 @@
 package org.example.logmetricapi.config;
 
+import org.example.logmetricapi.security.JwtAuthFilter;
 import org.example.logmetricapi.security.ApiKeyAuthFilter;
 import org.example.logmetricapi.service.ApiKeyService;
 import org.example.logmetricapi.service.CustomUserDetailsService;
@@ -25,31 +26,25 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Central Spring Security configuration.
- * Two independent filter chains (Section 0 of the sprint doc):
- *  - apiKeyChain (@Order(1)): machine-to-machine log ingestion, POST /api/logs, X-Api-Key header. Owned by Arnob.
- *  - jwtChain    (@Order(2)): everything else under /api/**, Bearer JWT. Owned by Rounak.
- */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private final ApiKeyService apiKeyService;
     private final JwtAuthFilter jwtAuthFilter;
     private final CustomUserDetailsService userDetailsService;
     private final PasswordEncoder passwordEncoder;
-    private final ApiKeyService apiKeyService;
 
     public SecurityConfig(
+            ApiKeyService apiKeyService,
             JwtAuthFilter jwtAuthFilter,
             CustomUserDetailsService userDetailsService,
-            PasswordEncoder passwordEncoder,
-            ApiKeyService apiKeyService
+            PasswordEncoder passwordEncoder
     ) {
+        this.apiKeyService = apiKeyService;
         this.jwtAuthFilter = jwtAuthFilter;
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
-        this.apiKeyService = apiKeyService;
     }
 
     @Bean
@@ -64,21 +59,22 @@ public class SecurityConfig {
         return source;
     }
 
-    // --- Chain 1 (Arnob's): machine-to-machine log ingestion ---
     @Bean
     @Order(1)
     public SecurityFilterChain apiKeyChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher(HttpMethod.POST, "/api/logs")
+                .securityMatcher("/api/logs")
                 .cors(c -> c.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(new ApiKeyAuthFilter(apiKeyService), UsernamePasswordAuthenticationFilter.class)
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.POST, "/api/logs").authenticated()
+                        .anyRequest().authenticated()
+                );
         return http.build();
     }
 
-    // --- Chain 2 (mine): everything else under /api/**, JWT-protected ---
     @Bean
     @Order(2)
     public SecurityFilterChain jwtChain(HttpSecurity http) throws Exception {
@@ -88,17 +84,18 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().authenticated()
-                )
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                );
         return http.build();
     }
 
     @Bean
     public AuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider(userDetailsService);
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        authProvider.setUserDetailsService(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder);
         return authProvider;
     }

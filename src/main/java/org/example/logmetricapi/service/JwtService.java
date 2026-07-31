@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.example.logmetricapi.model.User; // Imported custom User model
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -14,12 +15,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
-/**
- * Handles JWT creation, parsing, and validation.
- * All tokens are signed with HS256 using a secret key loaded from
- * application.properties, so a token can only be trusted if it was
- * issued by this exact server instance.
- */
 @Service
 public class JwtService {
 
@@ -32,8 +27,18 @@ public class JwtService {
     /**
      * Extracts the email (stored as the JWT subject) from a token.
      */
-    public String extractUsername(String token) {
+    public String extractEmail(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    // Kept for backward compatibility with your existing code
+    public String extractUsername(String token) {
+        return extractEmail(token);
+    }
+
+    // Phase 3 requirement: Extract Organization ID
+    public String extractOrganizationId(String token) {
+        return extractClaim(token, claims -> claims.get("organizationId", String.class));
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
@@ -42,10 +47,19 @@ public class JwtService {
     }
 
     /**
-     * Generates a signed JWT for the given user, with no extra custom claims.
+     * Phase 3 requirement: Generates a signed JWT embedding organizationId and role.
      */
-    public String generateToken(UserDetails userDetails) {
-        return generateToken(new HashMap<>(), userDetails);
+    public String generateToken(User user) {
+        Map<String, Object> extraClaims = new HashMap<>();
+
+        if (user.getOrganization() != null) {
+            extraClaims.put("organizationId", user.getOrganization().getId().toString());
+        }
+        if (user.getRole() != null) {
+            extraClaims.put("role", user.getRole().name());
+        }
+
+        return buildToken(extraClaims, user, jwtExpiration);
     }
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {

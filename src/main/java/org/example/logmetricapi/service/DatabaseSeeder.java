@@ -1,22 +1,18 @@
 package org.example.logmetricapi.service;
 
-import org.example.logmetricapi.model.ClientApplication;
-import org.example.logmetricapi.repository.ClientApplicationRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Service;
 
 @Service
 public class DatabaseSeeder implements CommandLineRunner {
-    private final ClientApplicationRepository repository;
-    public DatabaseSeeder(ClientApplicationRepository repository) {
-        this.repository = repository;
+
+    public DatabaseSeeder() {
     }
+
     @Override
     public void run(String... args) throws Exception {
-        if (repository.count() == 0) {
-            ClientApplication client = new ClientApplication("payment-service", "logmetric-dev-key-99999");
-            System.out.println(">>> SEEDED API KEY: " + client.getApiKey());
-            repository.save(client);
-        }
+        // ClientApplication model is removed/refactored in this branch.
+        // Seeding is temporarily disabled to allow successful compilation.
+        System.out.println(">>> DatabaseSeeder running... (ClientApplication seeding disabled)");
     }
 }
