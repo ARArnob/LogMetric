@@ -1,9 +1,9 @@
 package org.example.logmetricapi.consumer;
 
-import org.example.logmetricapi.service.PatternRecognitionService;
-import org.example.logmetricapi.service.LogAnalyticsService; // Injecting the math
 import org.example.logmetricapi.model.LogEntry;
 import org.example.logmetricapi.repository.LogRepository;
+import org.example.logmetricapi.service.PatternRecognitionService;
+import org.example.logmetricapi.service.SseService;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -11,20 +11,21 @@ public class LogConsumer {
 
     private final LogRepository logRepository;
     private final PatternRecognitionService patternService;
-    private final LogAnalyticsService logAnalyticsService; // Declare new service
+    private final SseService sseService;
 
-    public LogConsumer(LogRepository logRepository, PatternRecognitionService patternService, LogAnalyticsService logAnalyticsService) {
+    public LogConsumer(LogRepository logRepository, PatternRecognitionService patternService, SseService sseService) {
         this.logRepository = logRepository;
         this.patternService = patternService;
-        this.logAnalyticsService = logAnalyticsService;
+        this.sseService = sseService;
     }
 
     @org.springframework.amqp.rabbit.annotation.RabbitListener(queues = "log.queue")
     public void consumeLog(LogEntry log) {
         if (log.getMessage() == null || log.getMessage().isEmpty()) {
-            System.out.println("Payload rejected: Missing message");
+            System.out.println("Payload rejected");
             return;
         }
+        
         if (log.getUserId() == null || log.getUserId().isEmpty()) {
             log.setUserId("SYSTEM");
         }
@@ -34,19 +35,12 @@ public class LogConsumer {
         String hash = patternService.generateHash(cleansed);
         log.setPatternHash(hash);
 
-        long[] historicalBaseline = {12, 14, 11, 15, 13, 12, 14, 11, 15, 12};
-
-        long currentTraffic = (rawMessage.contains("DDoS")) ? 150 : 13;
-
-        double zScore = logAnalyticsService.calculateZScore(currentTraffic, historicalBaseline);
-
-        if (zScore > 3.0) {
-
-            System.out.println("🚨 ANOMALY DETECTED! Z-Score: " + String.format("%.2f", zScore) + " | Hash: " + hash);
-        } else {
-            System.out.println("✅ Log Ingested Normal. Z-Score: " + String.format("%.2f", zScore));
-        }
+        // Generate server-side composite ID to prevent collision
+        log.setId(log.getOrganizationId() + ":" + java.util.UUID.randomUUID().toString());
 
         logRepository.save(log);
+        sseService.broadcast(log);
+
+        System.out.println("Successfully ingested log with hash: " + hash);
     }
 }
