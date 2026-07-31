@@ -20,13 +20,16 @@ public class LogController {
     private final org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
     private final ElasticsearchOperations elasticsearchOperations;
     private final SseService sseService;
+    private final org.example.logmetricapi.service.LogSearchService logSearchService;
 
     public LogController(org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate, 
                          ElasticsearchOperations elasticsearchOperations,
-                         SseService sseService) {
+                         SseService sseService,
+                         org.example.logmetricapi.service.LogSearchService logSearchService) {
         this.rabbitTemplate = rabbitTemplate;
         this.elasticsearchOperations = elasticsearchOperations;
         this.sseService = sseService;
+        this.logSearchService = logSearchService;
     }
 
     @GetMapping(value = "/api/logs/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -36,9 +39,33 @@ public class LogController {
 
     @PostMapping("/api/logs")
     public ResponseEntity<String> ingestLog(@RequestBody LogEntry log) {
+        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof org.example.logmetricapi.model.Organization) {
+            org.example.logmetricapi.model.Organization org = (org.example.logmetricapi.model.Organization) authentication.getPrincipal();
+            log.setOrganizationId(String.valueOf(org.getId()));
+        } else {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("401 Unauthorized - Invalid Organization Context");
+        }
+
         System.out.println(log);
         rabbitTemplate.convertAndSend("log.queue", log);
         return ResponseEntity.accepted().body("202 Accepted - Log Queued for Processing"); 
+    }
+
+    @PostMapping("/api/logs/search")
+    public ResponseEntity<org.example.logmetricapi.dto.LogSearchResponse> searchLogsApi(@RequestBody org.example.logmetricapi.dto.LogSearchRequest request) {
+        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        
+        // TODO: Extract organizationId dynamically from authentication.getName() or principal.
+        // This relies on the upcoming JWT filter chain to populate the SecurityContext.
+        String orgId = "tenant-1"; // Temporary hardcoded fallback for testing
+        
+        if (authentication != null && authentication.getName() != null && !authentication.getName().equals("anonymousUser")) {
+            orgId = authentication.getName();
+        }
+        
+        org.example.logmetricapi.dto.LogSearchResponse response = logSearchService.searchLogs(request, orgId);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/api/logs")

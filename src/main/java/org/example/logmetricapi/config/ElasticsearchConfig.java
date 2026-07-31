@@ -50,6 +50,11 @@ package org.example.logmetricapi.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.IndexOperations;
+import org.example.logmetricapi.model.LogEntry;
 import org.springframework.data.elasticsearch.client.ClientConfiguration;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchConfiguration;
 import org.springframework.data.elasticsearch.repository.config.EnableElasticsearchRepositories;
@@ -85,5 +90,16 @@ public class ElasticsearchConfig extends ElasticsearchConfiguration {
         return ClientConfiguration.builder()
                 .connectedTo(elasticUrl)
                 .build();
+    }
+
+    @Bean
+    public CommandLineRunner initIndices(ElasticsearchOperations elasticsearchOperations) {
+        return args -> {
+            IndexOperations indexOps = elasticsearchOperations.indexOps(LogEntry.class);
+            if (!indexOps.exists()) {
+                indexOps.create();
+                indexOps.putMapping(indexOps.createMapping(LogEntry.class));
+            }
+        };
     }
 }

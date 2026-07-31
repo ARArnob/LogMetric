@@ -35,6 +35,9 @@ public class LogConsumer {
         String hash = patternService.generateHash(cleansed);
         log.setPatternHash(hash);
 
+        // Generate server-side composite ID to prevent collision
+        log.setId(log.getOrganizationId() + ":" + java.util.UUID.randomUUID().toString());
+
         logRepository.save(log);
         sseService.broadcast(log);
 
