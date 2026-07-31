@@ -45,7 +45,7 @@ public class SecurityConfig {
     @Order(1)
     public SecurityFilterChain apiKeyChain(HttpSecurity http) throws Exception {
         http
-            .securityMatcher(HttpMethod.POST, "/api/logs")
+            .securityMatchers(matchers -> matchers.requestMatchers(HttpMethod.POST, "/api/logs"))
             .cors(c -> c.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

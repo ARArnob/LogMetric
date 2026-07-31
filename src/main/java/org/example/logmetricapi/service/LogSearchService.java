@@ -35,20 +35,22 @@ public class LogSearchService {
     public LogSearchResponse searchLogs(LogSearchRequest request, String organizationId) {
         BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder();
 
-        // CRITICAL: Forcibly append a term filter for organizationId
         boolQueryBuilder.filter(f -> f.term(t -> t.field("organizationId").value(organizationId)));
 
+        if (request.getSystemId() != null && !request.getSystemId().trim().isEmpty()) {
+            boolQueryBuilder.filter(f -> f.term(t -> t.field("systemId").value(request.getSystemId())));
+        }
         if (request.getStartDate() != null || request.getEndDate() != null) {
-            boolQueryBuilder.filter(f -> f.range(r -> {
-                var range = r.field("timestamp");
+            boolQueryBuilder.filter(f -> f.range(r -> r.untyped(u -> {
+                u.field("timestamp");
                 if (request.getStartDate() != null) {
-                    range.gte(JsonData.of(request.getStartDate()));
+                    u.gte(JsonData.of(request.getStartDate()));
                 }
                 if (request.getEndDate() != null) {
-                    range.lte(JsonData.of(request.getEndDate()));
+                    u.lte(JsonData.of(request.getEndDate()));
                 }
-                return range;
-            }));
+                return u;
+            })));
         }
 
         if (request.getLevels() != null && !request.getLevels().isEmpty()) {
@@ -109,7 +111,12 @@ public class LogSearchService {
             org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations aggregations = 
                 (org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations) searchHits.getAggregations();
             
-            co.elastic.clients.elasticsearch._types.aggregations.Aggregate aggregate = aggregations.aggregationsAsMap().get("histogram");
+            org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation elasticsearchAggregation = 
+                (org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation) aggregations.aggregationsAsMap().get("histogram");
+            
+            co.elastic.clients.elasticsearch._types.aggregations.Aggregate aggregate = 
+                elasticsearchAggregation != null ? elasticsearchAggregation.aggregation().getAggregate() : null;
+                
             if (aggregate != null && aggregate.isDateHistogram()) {
                 aggregate.dateHistogram().buckets().array().forEach(bucket -> {
                     Map<String, Object> bucketMap = new HashMap<>();
@@ -138,8 +145,13 @@ public class LogSearchService {
         if (searchHits.getAggregations() != null) {
             org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations aggregations = 
                 (org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations) searchHits.getAggregations();
+                
+            org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation elasticsearchAggregation = 
+                (org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation) aggregations.aggregationsAsMap().get("severityDistribution");
             
-            co.elastic.clients.elasticsearch._types.aggregations.Aggregate aggregate = aggregations.aggregationsAsMap().get("severityDistribution");
+            co.elastic.clients.elasticsearch._types.aggregations.Aggregate aggregate = 
+                elasticsearchAggregation != null ? elasticsearchAggregation.aggregation().getAggregate() : null;
+                
             if (aggregate != null && aggregate.isSterms()) {
                 aggregate.sterms().buckets().array().forEach(bucket -> {
                     Map<String, Object> bucketMap = new HashMap<>();
