@@ -34,4 +34,16 @@ public final class AuthUtils {
     public static String requireOrganizationIdAsString(Authentication authentication) {
         return String.valueOf(requireOrganizationId(authentication));
     }
+
+    /**
+     * Resolves the authenticated User entity itself (not just its org id).
+     * Only meaningful for JWT-authenticated requests -- API-key-authenticated
+     * requests carry an Organization principal with no associated user.
+     */
+    public static User requireUser(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof User user) {
+            return user;
+        }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This operation requires a user account, not an API key");
+    }
 }
