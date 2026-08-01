@@ -103,6 +103,17 @@ function normalizeSearchResponse(raw: unknown): LogSearchResponse {
   };
 }
 
+export interface TeamUser {
+  id: number;
+  email: string;
+  role: string;
+}
+
+export interface Invite {
+  code: string;
+  expiresAt: string; // ISO-8601 instant
+}
+
 export interface AuthUser {
   email: string;
   role: string;
@@ -272,6 +283,46 @@ export async function generateApiKey(): Promise<string> {
 
   const body = await parseJsonResponse<{ apiKey: string }>(response);
   return body.apiKey;
+}
+
+// ===== Team: users & invites (authenticated, most ADMIN only) =====
+
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = getToken();
+  if (!token) {
+    throw new ApiError(401, "Not authenticated");
+  }
+  return { Authorization: `Bearer ${token}`, ...extra };
+}
+
+export async function listUsers(): Promise<TeamUser[]> {
+  const response = await fetch(`${API_BASE_URL}/users`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) clearStoredAuth();
+  return parseJsonResponse<TeamUser[]>(response);
+}
+
+export async function updateUserRole(id: number, role: "ADMIN" | "USER"): Promise<TeamUser> {
+  const response = await fetch(`${API_BASE_URL}/users/${id}/role`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ role }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) clearStoredAuth();
+  return parseJsonResponse<TeamUser>(response);
+}
+
+export async function createInvite(): Promise<Invite> {
+  const response = await fetch(`${API_BASE_URL}/invites`, {
+    method: "POST",
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) clearStoredAuth();
+  return parseJsonResponse<Invite>(response);
 }
 
 // ===== Live tail (SSE, authenticated) =====
