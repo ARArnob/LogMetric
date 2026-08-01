@@ -3,3 +3,8 @@ node_modules
 .env
 .env.local
 tsconfig.tsbuildinfo
+
+# Ad-hoc Playwright screenshot harness + its output (local visual checks)
+.shoot.mjs
+shots/
+shots-*/

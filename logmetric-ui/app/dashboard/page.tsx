@@ -1,44 +1,113 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { Activity, AlertCircle, AlertTriangle, Layers, Server } from "lucide-react";
+import AppShell from "../components/AppShell";
 import LogStream from "../components/LogStream";
-import {
-  Activity,
-  LogOut,
-  AlertCircle,
-  AlertTriangle,
-  CheckCircle,
-  Cpu,
-  Settings,
-} from "lucide-react";
-import Link from "next/link";
+import StatTile from "../components/charts/StatTile";
+import SeverityBar, { SeverityDatum } from "../components/charts/SeverityBar";
+import VolumeHistogram, { HistogramBucket } from "../components/charts/VolumeHistogram";
 import { useAuth } from "../lib/auth";
-import { isDemoMode } from "../lib/api";
+import {
+  ApiError,
+  LogEntry,
+  LogSearchResponse,
+  fetchDemoLogs,
+  isDemoMode,
+  searchLogs,
+} from "../lib/api";
+import { compactNumber } from "../lib/severity";
 
 export default function Dashboard() {
   const router = useRouter();
-  const { token, user, loading, logout } = useAuth();
+  const { token, loading: authLoading } = useAuth();
+  const demoView = isDemoMode && !token;
+
+  const [data, setData] = useState<LogSearchResponse | null>(null);
+  const [demoLogs, setDemoLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!loading && !token && !isDemoMode) {
-      router.replace("/signin");
+    if (!authLoading && !token && !isDemoMode) router.replace("/signin");
+  }, [authLoading, token, router]);
+
+  const load = useCallback(async () => {
+    if (demoView) {
+      setDemoLogs(fetchDemoLogs(60));
+      setLoading(false);
+      return;
     }
-  }, [loading, token, router]);
+    if (!token) return;
+    try {
+      setData(await searchLogs({ size: 200 }));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) router.replace("/signin");
+    } finally {
+      setLoading(false);
+    }
+  }, [demoView, token, router]);
 
-  function handleExit() {
-    logout();
-    router.push("/");
-  }
+  useEffect(() => {
+    if (authLoading) return;
+    load();
+    const id = setInterval(load, 20000);
+    return () => clearInterval(id);
+  }, [load, authLoading]);
 
-  if (loading || (!token && !isDemoMode)) {
+  // ---- Stats derived from real response data (never hardcoded) ----
+  const stats = useMemo(() => {
+    const sev = new Map<string, number>();
+    let total = 0;
+    let services = 0;
+    let buckets: HistogramBucket[] = [];
+
+    if (demoView) {
+      for (const l of demoLogs) {
+        const k = l.level.toUpperCase();
+        sev.set(k, (sev.get(k) ?? 0) + 1);
+      }
+      total = demoLogs.length;
+      services = new Set(demoLogs.map((l) => l.serviceName)).size;
+      buckets = bucketize(demoLogs);
+    } else if (data) {
+      for (const d of data.severityDistribution ?? []) {
+        const k = String(d.level ?? "").toUpperCase();
+        if (k) sev.set(k, Number(d.count ?? 0));
+      }
+      total = data.total ?? 0;
+      services = new Set((data.logs ?? []).map((l) => l.serviceName)).size;
+      buckets = (data.histogram ?? []).map((h) => ({
+        timestamp: Number(h.timestamp ?? 0),
+        count: Number(h.count ?? 0),
+        levels: (h.levels as Record<string, number>) ?? {},
+      }));
+    }
+
+    const errors = sev.get("ERROR") ?? 0;
+    const warns = sev.get("WARN") ?? 0;
+    const severity: SeverityDatum[] = [...sev].map(([level, count]) => ({ level, count }));
+
+    return {
+      total,
+      errors,
+      warns,
+      services,
+      errorRate: total > 0 ? (errors / total) * 100 : 0,
+      severity,
+      buckets,
+      spark: buckets.slice(-14).map((b) => b.count),
+    };
+  }, [data, demoLogs, demoView]);
+
+  if (authLoading || (!token && !isDemoMode)) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
         style={{ background: "var(--bg-base)", color: "var(--text-muted)" }}
       >
         <div className="flex items-center gap-3 text-sm">
-          <Activity className="w-4 h-4 animate-spin" style={{ color: "var(--accent-cyan)" }} />
+          <Activity className="w-4 h-4 animate-spin" style={{ color: "var(--accent)" }} />
           Loading…
         </div>
       </div>
@@ -46,210 +115,143 @@ export default function Dashboard() {
   }
 
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}
-    >
-      {/* Dashboard Navbar */}
-      <header
-        className="border-b sticky top-0 z-50"
-        style={{
-          background: "rgba(10, 14, 23, 0.9)",
-          backdropFilter: "blur(20px)",
-          borderColor: "var(--border-subtle)",
-        }}
-      >
-        <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div
-              className="relative w-7 h-7 rounded-md flex items-center justify-center"
-              style={{
-                background: "var(--accent-cyan-dim)",
-                border: "1px solid var(--accent-cyan)",
-              }}
-            >
-              <Activity className="w-3.5 h-3.5" style={{ color: "var(--accent-cyan)" }} />
-              <span
-                className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full pulse-live"
-                style={{ background: "var(--accent-green)" }}
-              />
-            </div>
-            <div>
-              <span className="text-sm font-bold">
-                Log<span style={{ color: "var(--accent-cyan)" }}>Metric</span>
-              </span>
-              <span
-                className="text-xs ml-2 font-medium"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Dashboard
-              </span>
-            </div>
-          </Link>
-
-          <div className="flex items-center gap-3">
-            {/* Breadcrumb */}
-            <nav
-              className="hidden md:flex items-center gap-2 text-xs"
-              style={{ color: "var(--text-muted)" }}
-            >
-              <Link href="/" className="hover:text-white transition-colors">
-                Home
-              </Link>
-              <span>/</span>
-              <span style={{ color: "var(--text-secondary)" }}>Live Telemetry</span>
-            </nav>
-
-            <div
-              className="h-4 w-px hidden md:block"
-              style={{ background: "var(--border-default)" }}
-            />
-
-            {user && (
-              <span
-                className="hidden md:inline text-xs font-medium"
-                style={{ color: "var(--text-secondary)" }}
-                title={`Signed in as ${user.email} (${user.role})`}
-              >
-                {user.email}
-              </span>
-            )}
-
-            <button
-              className="flex items-center gap-1.5 p-1.5 rounded-md transition-colors"
-              style={{ color: "var(--text-muted)" }}
-              title="Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={handleExit}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
-              style={{
-                color: "var(--text-secondary)",
-                border: "1px solid var(--border-subtle)",
-              }}
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              {token ? "Sign Out" : "Exit"}
-            </button>
-          </div>
+    <AppShell>
+      {/* Page header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-6 animate-fade-up">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: "var(--text-primary)" }}>
+            Live Telemetry
+          </h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+            Real-time ingestion, pattern clustering, and anomaly detection — scoped to your organization.
+          </p>
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
-        {/* Page header */}
-        <div className="mb-8">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-2xl font-black tracking-tight" style={{ color: "var(--text-primary)" }}>
-                Live Telemetry
-              </h1>
-              <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
-                Real-time log ingestion, pattern matching, and anomaly detection.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
-              <span
-                className="w-1.5 h-1.5 rounded-full pulse-live"
-                style={{ background: "var(--accent-green)" }}
-              />
-              <span style={{ color: "var(--accent-green)", fontWeight: 600 }}>
-                System Online
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          {[
-            {
-              icon: CheckCircle,
-              label: "System Status",
-              value: "Operational",
-              sub: "All services healthy",
-              color: "var(--accent-green)",
-              colorDim: "var(--accent-green-dim)",
-            },
-            {
-              icon: AlertCircle,
-              label: "Error Rate",
-              value: "0.04%",
-              sub: "Last 5 minutes",
-              color: "var(--error)",
-              colorDim: "var(--error-dim)",
-            },
-            {
-              icon: AlertTriangle,
-              label: "Active Warnings",
-              value: "12",
-              sub: "Across 3 services",
-              color: "var(--warn)",
-              colorDim: "var(--warn-dim)",
-            },
-            {
-              icon: Cpu,
-              label: "Throughput",
-              value: "84k/s",
-              sub: "Events ingested",
-              color: "var(--accent-cyan)",
-              colorDim: "var(--accent-cyan-dim)",
-            },
-          ].map(({ icon: Icon, label, value, sub, color, colorDim }) => (
-            <div
-              key={label}
-              className="card-hover p-4 rounded-xl"
-              style={{
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border-subtle)",
-              }}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                  {label}
-                </span>
-                <div
-                  className="w-7 h-7 rounded-md flex items-center justify-center"
-                  style={{ background: colorDim }}
-                >
-                  <Icon className="w-3.5 h-3.5" style={{ color }} />
-                </div>
-              </div>
-              <div className="text-2xl font-black mb-1" style={{ color }}>
-                {value}
-              </div>
-              <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-                {sub}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Log Stream */}
-        <LogStream />
-      </main>
-
-      {/* Footer */}
-      <footer
-        className="border-t py-4 px-6"
-        style={{ borderColor: "var(--border-subtle)" }}
-      >
-        <div
-          className="max-w-7xl mx-auto flex items-center justify-between text-xs"
-          style={{ color: "var(--text-muted)" }}
-        >
-          <span>LogMetric Dashboard · v2.4.1</span>
-          <span>
-            Connected to{" "}
-            <span style={{ color: "var(--accent-cyan)", fontFamily: "monospace" }}>
-              {process.env.NEXT_PUBLIC_API_URL || "localhost:8081"}
-            </span>
+        {demoView && (
+          <span
+            className="text-[10px] font-bold px-2.5 py-1 rounded-full tracking-widest uppercase"
+            style={{
+              background: "var(--sev-warn-dim)",
+              color: "var(--sev-warn)",
+              border: "1px solid var(--sev-warn)",
+            }}
+          >
+            Demo mode · synthetic data
           </span>
+        )}
+      </div>
+
+      {/* KPI row -- every value computed from the response above */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+        <div className="animate-fade-up d1">
+          <StatTile
+            label="Events in range"
+            value={compactNumber(stats.total)}
+            sub={stats.services > 0 ? `across ${stats.services} service${stats.services === 1 ? "" : "s"}` : "no services yet"}
+            icon={<Layers className="w-3.5 h-3.5" />}
+            spark={stats.spark}
+            loading={loading}
+          />
         </div>
-      </footer>
-    </div>
+        <div className="animate-fade-up d2">
+          <StatTile
+            label="Error rate"
+            value={`${stats.errorRate.toFixed(2)}%`}
+            sub={`${compactNumber(stats.errors)} error${stats.errors === 1 ? "" : "s"}`}
+            icon={<AlertCircle className="w-3.5 h-3.5" />}
+            accent="var(--sev-error-text)"
+            accentDim="var(--sev-error-dim)"
+            loading={loading}
+          />
+        </div>
+        <div className="animate-fade-up d3">
+          <StatTile
+            label="Warnings"
+            value={compactNumber(stats.warns)}
+            sub="in the current window"
+            icon={<AlertTriangle className="w-3.5 h-3.5" />}
+            accent="var(--sev-warn-text)"
+            accentDim="var(--sev-warn-dim)"
+            loading={loading}
+          />
+        </div>
+        <div className="animate-fade-up d4">
+          <StatTile
+            label="Active services"
+            value={String(stats.services)}
+            sub="reporting in this window"
+            icon={<Server className="w-3.5 h-3.5" />}
+            loading={loading}
+          />
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5 items-stretch">
+        <div className="card card-sheen p-5 lg:col-span-2 animate-fade-up d4">
+          <h2 className="text-sm font-bold mb-0.5" style={{ color: "var(--text-primary)" }}>
+            Ingest volume
+          </h2>
+          <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
+            Hourly buckets, stacked by severity
+          </p>
+          {loading ? (
+            <div className="skeleton" style={{ height: 132 }} />
+          ) : (
+            <VolumeHistogram buckets={stats.buckets} />
+          )}
+        </div>
+
+        <div className="card card-sheen p-5 animate-fade-up d5 flex flex-col">
+          <h2 className="text-sm font-bold mb-0.5" style={{ color: "var(--text-primary)" }}>
+            Severity mix
+          </h2>
+          <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
+            Share of events by level
+          </p>
+          {loading ? (
+            <div className="skeleton flex-1" style={{ minHeight: 108 }} />
+          ) : (
+            <div className="flex-1 flex flex-col justify-end">
+              <SeverityBar data={stats.severity} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Stream */}
+      <div className="animate-fade-up d6">
+        <LogStream />
+      </div>
+    </AppShell>
   );
+}
+
+/** Group demo logs into hourly buckets so the chart has the same shape as the API's. */
+function bucketize(logs: LogEntry[]): HistogramBucket[] {
+  const HOUR = 3600_000;
+  const map = new Map<number, HistogramBucket>();
+  for (const l of logs) {
+    const t = Math.floor(new Date(l.timestamp).getTime() / HOUR) * HOUR;
+    if (!map.has(t)) map.set(t, { timestamp: t, count: 0, levels: {} });
+    const b = map.get(t)!;
+    b.count += 1;
+    const k = l.level.toUpperCase();
+    b.levels![k] = (b.levels![k] ?? 0) + 1;
+  }
+  // Demo logs span only a few seconds; spread them so the chart reads as a series.
+  const arr = [...map.values()].sort((a, b) => a.timestamp - b.timestamp);
+  if (arr.length === 1) {
+    const base = arr[0].timestamp;
+    return logs
+      .reduce<HistogramBucket[]>((acc, l, i) => {
+        const idx = Math.floor((i / logs.length) * 12);
+        acc[idx] ??= { timestamp: base - (11 - idx) * HOUR, count: 0, levels: {} };
+        acc[idx].count += 1;
+        const k = l.level.toUpperCase();
+        acc[idx].levels![k] = (acc[idx].levels![k] ?? 0) + 1;
+        return acc;
+      }, [])
+      .filter(Boolean);
+  }
+  return arr;
 }
