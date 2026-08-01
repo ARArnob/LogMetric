@@ -47,3 +47,6 @@ UI-PLAN.md
 
 ### Windows / Google Drive folder metadata ###
 desktop.ini
+
+### Local Claude Code settings ###
+.claude/

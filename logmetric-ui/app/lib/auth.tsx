@@ -2,7 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { AuthUser, clearStoredAuth, getStoredAuth, setStoredAuth } from "./api";
+import { ApiError, AuthUser, clearStoredAuth, getCurrentUser, getStoredAuth, setStoredAuth, updateStoredUser } from "./api";
+
+const ROLE_REFRESH_MS = 30000;
 
 interface AuthContextValue {
   token: string | null;
@@ -39,6 +41,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
   }, []);
+
+  // Re-reads the caller's own role/org from the DB, so a demotion (or
+  // promotion) made in another tab/session is reflected here without
+  // waiting for the JWT to expire or the user to re-login. A network
+  // hiccup is swallowed -- only a genuine 401 (revoked/expired token)
+  // signs the user out.
+  const refreshUser = useCallback(async () => {
+    try {
+      const fresh = await getCurrentUser();
+      updateStoredUser(fresh);
+      setUser(fresh);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logout();
+      }
+    }
+  }, [logout]);
+
+  useEffect(() => {
+    if (!token) return;
+    refreshUser();
+    const interval = setInterval(refreshUser, ROLE_REFRESH_MS);
+    return () => clearInterval(interval);
+    // refreshUser is stable (depends only on the stable `logout`); re-running
+    // this effect only on `token` change avoids restarting the interval on
+    // every refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   return (
     <AuthContext.Provider value={{ token, user, loading, login, logout }}>

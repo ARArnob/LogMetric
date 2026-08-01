@@ -57,6 +57,8 @@ export interface LogSearchResponse {
   severityDistribution: SeverityBucket[];
   serviceNames: ServiceBucket[];
   patternClusters: PatternCluster[];
+  /** "minute" | "hour" | "day" | "week" -- the calendar interval the backend actually bucketed by, so the chart's axis label can never contradict the data (F13). */
+  histogramInterval: string;
 }
 
 // The backend returns aggregation buckets as Map<String,Object>, so numbers
@@ -100,7 +102,19 @@ function normalizeSearchResponse(raw: unknown): LogSearchResponse {
         dominantService: bucket.dominantService != null ? String(bucket.dominantService) : undefined,
       };
     }),
+    histogramInterval: typeof r.histogramInterval === "string" ? r.histogramInterval : "hour",
   };
+}
+
+export interface TeamUser {
+  id: number;
+  email: string;
+  role: string;
+}
+
+export interface Invite {
+  code: string;
+  expiresAt: string; // ISO-8601 instant
 }
 
 export interface AuthUser {
@@ -164,6 +178,14 @@ export function clearStoredAuth(): void {
   sessionStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
+/** Rewrites just the user portion of stored auth, preserving the token and whichever storage (local/session) is already in use. */
+export function updateStoredUser(user: AuthUser): void {
+  const stored = getStoredAuth();
+  if (!stored) return;
+  const persistent = localStorage.getItem(AUTH_STORAGE_KEY) !== null;
+  setStoredAuth({ token: stored.token, user }, persistent);
+}
+
 export function getToken(): string | null {
   return getStoredAuth()?.token ?? null;
 }
@@ -179,9 +201,26 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Thrown for MethodArgumentNotValidException responses -- GlobalExceptionHandler
+ * returns a field->message map instead of a single top-level `message`, so
+ * these need to be routed to the right input, not dumped as one string.
+ */
+export class ValidationError extends ApiError {
+  fields: Record<string, string>;
+  constructor(fields: Record<string, string>) {
+    super(400, "Validation failed");
+    this.name = "ValidationError";
+    this.fields = fields;
+  }
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => null);
+    if (body && typeof body === "object" && "fields" in body && body.fields && typeof body.fields === "object") {
+      throw new ValidationError(body.fields as Record<string, string>);
+    }
     const message =
       (body && typeof body === "object" && "message" in body && (body as { message?: string }).message) ||
       `Request failed with status ${response.status}`;
@@ -212,6 +251,30 @@ export async function register(
     body: JSON.stringify({ email, password, organizationName }),
   });
   return parseJsonResponse<AuthApiResponse>(response);
+}
+
+/** Joins an existing organization as a USER by redeeming a single-use invite code. */
+export async function registerWithInvite(
+  email: string,
+  password: string,
+  inviteCode: string
+): Promise<AuthApiResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/register-with-invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, inviteCode }),
+  });
+  return parseJsonResponse<AuthApiResponse>(response);
+}
+
+/** The caller's own record, read fresh from the DB -- used to detect a role change without waiting for re-login. */
+export async function getCurrentUser(): Promise<AuthUser> {
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) clearStoredAuth();
+  return parseJsonResponse<AuthUser>(response);
 }
 
 // ===== Log search (authenticated) =====
@@ -272,6 +335,46 @@ export async function generateApiKey(): Promise<string> {
 
   const body = await parseJsonResponse<{ apiKey: string }>(response);
   return body.apiKey;
+}
+
+// ===== Team: users & invites (authenticated, most ADMIN only) =====
+
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = getToken();
+  if (!token) {
+    throw new ApiError(401, "Not authenticated");
+  }
+  return { Authorization: `Bearer ${token}`, ...extra };
+}
+
+export async function listUsers(): Promise<TeamUser[]> {
+  const response = await fetch(`${API_BASE_URL}/users`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) clearStoredAuth();
+  return parseJsonResponse<TeamUser[]>(response);
+}
+
+export async function updateUserRole(id: number, role: "ADMIN" | "USER"): Promise<TeamUser> {
+  const response = await fetch(`${API_BASE_URL}/users/${id}/role`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ role }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) clearStoredAuth();
+  return parseJsonResponse<TeamUser>(response);
+}
+
+export async function createInvite(): Promise<Invite> {
+  const response = await fetch(`${API_BASE_URL}/invites`, {
+    method: "POST",
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) clearStoredAuth();
+  return parseJsonResponse<Invite>(response);
 }
 
 // ===== Live tail (SSE, authenticated) =====

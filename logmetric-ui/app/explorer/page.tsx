@@ -5,11 +5,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Activity, Inbox, SearchX, Rows3, Rows4, WrapText, Key } from "lucide-react";
 import Link from "next/link";
 import AppShell from "../components/AppShell";
-import FilterBar, { TIME_PRESETS } from "../components/explorer/FilterBar";
+import FilterBar from "../components/explorer/FilterBar";
 import LogTable from "../components/explorer/LogTable";
 import LogDetailDrawer from "../components/explorer/LogDetailDrawer";
 import EmptyState from "../components/ui/EmptyState";
 import Pagination from "../components/ui/Pagination";
+import { TIME_PRESETS, TimeRangeValue, presetRange } from "../components/TimeRangePicker";
 import { useRequireAuth } from "../lib/auth";
 import { LogEntry, LogSearchRequest } from "../lib/api";
 import { useLogSearch } from "../lib/useLogSearch";
@@ -18,14 +19,12 @@ const DENSITY_KEY = "logmetric_explorer_density";
 const WRAP_KEY = "logmetric_explorer_wrap";
 const DEFAULT_SIZE = 50;
 
-function presetRange(id: string): { startDate?: number; endDate?: number } {
-  const preset = TIME_PRESETS.find((p) => p.id === id);
-  if (!preset || preset.id === "all") return { startDate: undefined, endDate: undefined };
-  return { startDate: Date.now() - preset.ms, endDate: undefined };
-}
-
 function parseParams(params: URLSearchParams): { filters: LogSearchRequest; timeRangeId: string } {
   const timeRangeId = params.get("range") || "all";
+  const customRange =
+    timeRangeId === "custom"
+      ? { startDate: params.get("start") ? Number(params.get("start")) : undefined, endDate: params.get("end") ? Number(params.get("end")) : undefined }
+      : presetRange(timeRangeId);
   return {
     filters: {
       keyword: params.get("q") || undefined,
@@ -34,7 +33,7 @@ function parseParams(params: URLSearchParams): { filters: LogSearchRequest; time
       patternHash: params.get("patternHash") || undefined,
       page: params.get("page") ? Number(params.get("page")) : 0,
       size: params.get("size") ? Number(params.get("size")) : DEFAULT_SIZE,
-      ...presetRange(timeRangeId),
+      ...customRange,
     },
     timeRangeId,
   };
@@ -47,6 +46,10 @@ function toParams(filters: LogSearchRequest, timeRangeId: string): URLSearchPara
   if (filters.serviceNames?.length) params.set("services", filters.serviceNames.join(","));
   if (filters.patternHash) params.set("patternHash", filters.patternHash);
   if (timeRangeId !== "all") params.set("range", timeRangeId);
+  if (timeRangeId === "custom") {
+    if (filters.startDate) params.set("start", String(filters.startDate));
+    if (filters.endDate) params.set("end", String(filters.endDate));
+  }
   if (filters.page) params.set("page", String(filters.page));
   if (filters.size && filters.size !== DEFAULT_SIZE) params.set("size", String(filters.size));
   return params;
@@ -120,9 +123,13 @@ function ExplorerContent() {
   }, [searchParams]);
 
   const handleTimeRangeChange = useCallback(
-    (id: string) => {
-      setTimeRangeId(id);
-      setFilters({ ...presetRange(id), page: 0 });
+    (value: TimeRangeValue) => {
+      setTimeRangeId(value.id);
+      if (value.id === "custom") {
+        setFilters({ startDate: value.startDate, endDate: value.endDate, page: 0 });
+      } else {
+        setFilters({ ...presetRange(value.id), page: 0 });
+      }
     },
     [setFilters]
   );
@@ -167,14 +174,22 @@ function ExplorerContent() {
     }
     if (timeRangeId !== "all") {
       const preset = TIME_PRESETS.find((p) => p.id === timeRangeId);
-      chips.push({ key: "range", label: preset?.label ?? timeRangeId, onRemove: () => handleTimeRangeChange("all") });
+      chips.push({ key: "range", label: preset?.label ?? "Custom range", onRemove: () => handleTimeRangeChange({ id: "all" }) });
     }
     return chips;
   }, [filters, timeRangeId, setFilters, handleTimeRangeChange]);
 
   function clearAll() {
     setTimeRangeId("all");
-    setFilters({ keyword: undefined, levels: undefined, serviceNames: undefined, patternHash: undefined, page: 0 });
+    setFilters({
+      keyword: undefined,
+      levels: undefined,
+      serviceNames: undefined,
+      patternHash: undefined,
+      startDate: undefined,
+      endDate: undefined,
+      page: 0,
+    });
   }
 
   const size = filters.size || DEFAULT_SIZE;
@@ -207,7 +222,7 @@ function ExplorerContent() {
           onServicesChange={(v) => setFilters({ serviceNames: v.length ? v : undefined, page: 0 })}
           serviceOptions={data.serviceNames}
           severityOptions={data.severityDistribution}
-          timeRangeId={timeRangeId}
+          timeRange={{ id: timeRangeId, startDate: filters.startDate, endDate: filters.endDate }}
           onTimeRangeChange={handleTimeRangeChange}
         />
 

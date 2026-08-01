@@ -76,9 +76,14 @@ public class LogSearchService {
 
         Query query = Query.of(q -> q.bool(boolQueryBuilder.build()));
 
-        // Date Histogram Aggregation (Hourly)
+        // Bucket width scales with the requested span so a 7-day range doesn't
+        // render as 168 hourly slivers and a 15-minute range doesn't render as
+        // a single hourly bar. The chosen label is reported back so the
+        // frontend's axis text can never contradict the actual bucket size
+        // (it used to hardcode "events / hour" regardless of range -- see F13).
+        HistogramResolution resolution = resolveHistogramResolution(request);
         Aggregation dateHistogram = Aggregation.of(a -> a.dateHistogram(
-                DateHistogramAggregation.of(dh -> dh.field("timestamp").calendarInterval(CalendarInterval.Hour))
+                DateHistogramAggregation.of(dh -> dh.field("timestamp").calendarInterval(resolution.interval()))
         ).aggregations("by_level", Aggregation.of(sub -> sub.terms(TermsAggregation.of(t -> t.field("level"))))));
 
         // Terms Aggregation for Severity Distribution
@@ -119,8 +124,38 @@ public class LogSearchService {
         response.setSeverityDistribution(parseSeverityDistribution(searchHits));
         response.setServiceNames(parseServiceNames(searchHits));
         response.setPatternClusters(parsePatternClusters(searchHits));
+        response.setHistogramInterval(resolution.label());
 
         return response;
+    }
+
+    private record HistogramResolution(CalendarInterval interval, String label) {}
+
+    /**
+     * "All time" and open-ended custom ranges have no fixed span to key off,
+     * so they fall through to the coarsest bucket (Week) rather than trying
+     * to interpolate a real duration from the data itself.
+     */
+    private HistogramResolution resolveHistogramResolution(LogSearchRequest request) {
+        Long start = request.getStartDate();
+        if (start == null) {
+            return new HistogramResolution(CalendarInterval.Week, "week");
+        }
+        long end = request.getEndDate() != null ? request.getEndDate() : System.currentTimeMillis();
+        long spanMs = end - start;
+        long hour = 3_600_000L;
+        long day = 24 * hour;
+
+        if (spanMs <= 3 * hour) {
+            return new HistogramResolution(CalendarInterval.Minute, "minute");
+        }
+        if (spanMs <= 3 * day) {
+            return new HistogramResolution(CalendarInterval.Hour, "hour");
+        }
+        if (spanMs <= 60 * day) {
+            return new HistogramResolution(CalendarInterval.Day, "day");
+        }
+        return new HistogramResolution(CalendarInterval.Week, "week");
     }
 
     private List<Map<String, Object>> parseHistogram(SearchHits<LogEntry> searchHits) {

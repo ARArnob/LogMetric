@@ -11,6 +11,7 @@ public class LogSearchResponse {
     private List<Map<String, Object>> severityDistribution;
     private List<Map<String, Object>> serviceNames;
     private List<Map<String, Object>> patternClusters;
+    private String histogramInterval;
 
     public List<LogEntry> getLogs() { return logs; }
     public void setLogs(List<LogEntry> logs) { this.logs = logs; }
@@ -29,4 +30,7 @@ public class LogSearchResponse {
 
     public List<Map<String, Object>> getPatternClusters() { return patternClusters; }
     public void setPatternClusters(List<Map<String, Object>> patternClusters) { this.patternClusters = patternClusters; }
+
+    public String getHistogramInterval() { return histogramInterval; }
+    public void setHistogramInterval(String histogramInterval) { this.histogramInterval = histogramInterval; }
 }

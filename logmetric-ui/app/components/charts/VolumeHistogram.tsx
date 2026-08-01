@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SEVERITY, SEVERITY_ORDER, Severity, compactNumber } from "../../lib/severity";
 
 export interface HistogramBucket {
@@ -9,19 +9,51 @@ export interface HistogramBucket {
   levels?: Record<string, number>;
 }
 
+const INTERVAL_LABEL: Record<string, string> = {
+  minute: "events / minute",
+  hour: "events / hour",
+  day: "events / day",
+  week: "events / week",
+};
+
 /**
  * Volume over time, stacked by severity. Columns capped at 24px with a 2px
  * surface gap between stack segments and between adjacent columns.
- * Hover is shipped by default -- an SVG chart is interactive.
+ * Hover is shipped by default -- an SVG chart is interactive. Drag across
+ * bars to brush-zoom, if `onBrush` is provided (F13).
  */
 export default function VolumeHistogram({
   buckets,
   height = 132,
+  interval = "hour",
+  onBrush,
 }: {
   buckets: HistogramBucket[];
   height?: number;
+  /** Must match what the backend actually bucketed by -- never hardcode this. */
+  interval?: string;
+  onBrush?: (startMs: number, endMs: number) => void;
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const [dragStart, setDragStart] = useState<number | null>(null);
+  const [dragEnd, setDragEnd] = useState<number | null>(null);
+  const dragging = dragStart !== null;
+
+  useEffect(() => {
+    if (!dragging) return;
+    function onMouseUp() {
+      if (dragStart !== null && dragEnd !== null && dragStart !== dragEnd && onBrush) {
+        const lo = Math.min(dragStart, dragEnd);
+        const hi = Math.max(dragStart, dragEnd);
+        const bucketMs = buckets.length > 1 ? buckets[1].timestamp - buckets[0].timestamp : 3_600_000;
+        onBrush(buckets[lo].timestamp, buckets[hi].timestamp + bucketMs);
+      }
+      setDragStart(null);
+      setDragEnd(null);
+    }
+    document.addEventListener("mouseup", onMouseUp);
+    return () => document.removeEventListener("mouseup", onMouseUp);
+  }, [dragging, dragStart, dragEnd, buckets, onBrush]);
 
   if (!buckets.length) {
     return (
@@ -51,7 +83,7 @@ export default function VolumeHistogram({
           {compactNumber(axisTop)}
         </span>
         <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-          events / hour
+          {INTERVAL_LABEL[interval] ?? `events / ${interval}`}
         </span>
       </div>
 
@@ -63,6 +95,7 @@ export default function VolumeHistogram({
           gap: 2,
           borderBottom: "1px solid var(--border-default)",
           borderTop: "1px solid var(--grid-line)",
+          userSelect: dragging ? "none" : undefined,
         }}
         onMouseLeave={() => setHover(null)}
       >
@@ -71,6 +104,20 @@ export default function VolumeHistogram({
           className="absolute left-0 right-0 pointer-events-none"
           style={{ bottom: "50%", height: 1, background: "var(--grid-line)" }}
         />
+
+        {/* brush selection overlay */}
+        {dragging && dragEnd !== null && (
+          <div
+            className="absolute top-0 bottom-0 pointer-events-none"
+            style={{
+              left: `${(Math.min(dragStart!, dragEnd) / buckets.length) * 100}%`,
+              width: `${((Math.abs(dragEnd - dragStart!) + 1) / buckets.length) * 100}%`,
+              background: "var(--accent-dim)",
+              border: "1px solid var(--accent)",
+              zIndex: 5,
+            }}
+          />
+        )}
 
         {buckets.map((b, i) => {
           const isHover = hover === i;
@@ -86,8 +133,12 @@ export default function VolumeHistogram({
             <div
               key={i}
               className="relative flex-1 flex flex-col justify-end items-center grow-up"
-              style={{ height: "100%", animationDelay: `${Math.min(i * 14, 350)}ms` }}
-              onMouseEnter={() => setHover(i)}
+              style={{ height: "100%", animationDelay: `${Math.min(i * 14, 350)}ms`, cursor: onBrush ? "col-resize" : undefined }}
+              onMouseEnter={() => {
+                setHover(i);
+                if (dragging) setDragEnd(i);
+              }}
+              onMouseDown={() => onBrush && setDragStart(i)}
             >
               {/* invisible full-height hit target: hover shouldn't require hitting a thin bar */}
               <div className="absolute inset-0" style={{ cursor: "default" }} />
