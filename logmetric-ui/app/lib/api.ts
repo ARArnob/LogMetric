@@ -23,11 +23,79 @@ export interface LogSearchRequest {
   systemId?: string;
 }
 
+export interface HistogramBucket {
+  timestamp: number;
+  count: number;
+  levels: Record<string, number>;
+}
+
+export interface SeverityBucket {
+  level: string;
+  count: number;
+}
+
+export interface ServiceBucket {
+  name: string;
+  count: number;
+}
+
+export interface PatternCluster {
+  patternHash: string;
+  count: number;
+  levels: Record<string, number>;
+  sampleMessage?: string;
+  sampleService?: string;
+}
+
 export interface LogSearchResponse {
   logs: LogEntry[];
   total: number;
-  histogram: Array<Record<string, unknown>>;
-  severityDistribution: Array<Record<string, unknown>>;
+  histogram: HistogramBucket[];
+  severityDistribution: SeverityBucket[];
+  serviceNames: ServiceBucket[];
+  patternClusters: PatternCluster[];
+}
+
+// The backend returns aggregation buckets as Map<String,Object>, so numbers
+// and missing fields aren't guaranteed to arrive as the types above imply.
+// Coerce once here, at the boundary, so every consumer downstream can trust
+// the real interfaces instead of re-guarding at every call site.
+function normalizeSearchResponse(raw: unknown): LogSearchResponse {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+  return {
+    logs: asArray(r.logs) as LogEntry[],
+    total: Number(r.total ?? 0),
+    histogram: asArray(r.histogram).map((b) => {
+      const bucket = (b ?? {}) as Record<string, unknown>;
+      const levels = (bucket.levels ?? {}) as Record<string, unknown>;
+      return {
+        timestamp: Number(bucket.timestamp ?? 0),
+        count: Number(bucket.count ?? 0),
+        levels: Object.fromEntries(Object.entries(levels).map(([k, v]) => [k, Number(v)])),
+      };
+    }),
+    severityDistribution: asArray(r.severityDistribution).map((b) => {
+      const bucket = (b ?? {}) as Record<string, unknown>;
+      return { level: String(bucket.level ?? ""), count: Number(bucket.count ?? 0) };
+    }),
+    serviceNames: asArray(r.serviceNames).map((b) => {
+      const bucket = (b ?? {}) as Record<string, unknown>;
+      return { name: String(bucket.name ?? ""), count: Number(bucket.count ?? 0) };
+    }),
+    patternClusters: asArray(r.patternClusters).map((b) => {
+      const bucket = (b ?? {}) as Record<string, unknown>;
+      const levels = (bucket.levels ?? {}) as Record<string, unknown>;
+      return {
+        patternHash: String(bucket.patternHash ?? ""),
+        count: Number(bucket.count ?? 0),
+        levels: Object.fromEntries(Object.entries(levels).map(([k, v]) => [k, Number(v)])),
+        sampleMessage: bucket.sampleMessage != null ? String(bucket.sampleMessage) : undefined,
+        sampleService: bucket.sampleService != null ? String(bucket.sampleService) : undefined,
+      };
+    }),
+  };
 }
 
 export interface AuthUser {
@@ -143,11 +211,18 @@ export async function register(
 
 // ===== Log search (authenticated) =====
 
-export async function searchLogs(request: LogSearchRequest = {}): Promise<LogSearchResponse> {
+export async function searchLogs(
+  request: LogSearchRequest = {},
+  opts: { signal?: AbortSignal } = {}
+): Promise<LogSearchResponse> {
   const token = getToken();
   if (!token) {
     throw new ApiError(401, "Not authenticated");
   }
+
+  const signal = opts.signal
+    ? AbortSignal.any([AbortSignal.timeout(8000), opts.signal])
+    : AbortSignal.timeout(8000);
 
   const response = await fetch(`${API_BASE_URL}/logs/search`, {
     method: "POST",
@@ -156,14 +231,15 @@ export async function searchLogs(request: LogSearchRequest = {}): Promise<LogSea
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(request),
-    signal: AbortSignal.timeout(8000),
+    signal,
   });
 
   if (response.status === 401) {
     clearStoredAuth();
   }
 
-  return parseJsonResponse<LogSearchResponse>(response);
+  const body = await parseJsonResponse<unknown>(response);
+  return normalizeSearchResponse(body);
 }
 
 // ===== Live tail (SSE, authenticated) =====

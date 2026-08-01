@@ -1,22 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, AlertCircle, AlertTriangle, Layers, Server } from "lucide-react";
 import AppShell from "../components/AppShell";
 import LogStream from "../components/LogStream";
 import StatTile from "../components/charts/StatTile";
-import SeverityBar, { SeverityDatum } from "../components/charts/SeverityBar";
-import VolumeHistogram, { HistogramBucket } from "../components/charts/VolumeHistogram";
+import SeverityBar from "../components/charts/SeverityBar";
+import VolumeHistogram from "../components/charts/VolumeHistogram";
 import { useAuth } from "../lib/auth";
-import {
-  ApiError,
-  LogEntry,
-  LogSearchResponse,
-  fetchDemoLogs,
-  isDemoMode,
-  searchLogs,
-} from "../lib/api";
+import { isDemoMode } from "../lib/api";
+import { useLogSearch } from "../lib/useLogSearch";
 import { compactNumber } from "../lib/severity";
 
 export default function Dashboard() {
@@ -24,69 +18,20 @@ export default function Dashboard() {
   const { token, loading: authLoading } = useAuth();
   const demoView = isDemoMode && !token;
 
-  const [data, setData] = useState<LogSearchResponse | null>(null);
-  const [demoLogs, setDemoLogs] = useState<LogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     if (!authLoading && !token && !isDemoMode) router.replace("/signin");
   }, [authLoading, token, router]);
 
-  const load = useCallback(async () => {
-    if (demoView) {
-      setDemoLogs(fetchDemoLogs(60));
-      setLoading(false);
-      return;
-    }
-    if (!token) return;
-    try {
-      setData(await searchLogs({ size: 200 }));
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) router.replace("/signin");
-    } finally {
-      setLoading(false);
-    }
-  }, [demoView, token, router]);
-
-  useEffect(() => {
-    if (authLoading) return;
-    load();
-    const id = setInterval(load, 20000);
-    return () => clearInterval(id);
-  }, [load, authLoading]);
+  // Single owner of the search request -- LogStream reads the same result
+  // via props instead of polling /logs/search a second time.
+  const { data, loading, error, refresh } = useLogSearch({ size: 200 });
 
   // ---- Stats derived from real response data (never hardcoded) ----
   const stats = useMemo(() => {
-    const sev = new Map<string, number>();
-    let total = 0;
-    let services = 0;
-    let buckets: HistogramBucket[] = [];
-
-    if (demoView) {
-      for (const l of demoLogs) {
-        const k = l.level.toUpperCase();
-        sev.set(k, (sev.get(k) ?? 0) + 1);
-      }
-      total = demoLogs.length;
-      services = new Set(demoLogs.map((l) => l.serviceName)).size;
-      buckets = bucketize(demoLogs);
-    } else if (data) {
-      for (const d of data.severityDistribution ?? []) {
-        const k = String(d.level ?? "").toUpperCase();
-        if (k) sev.set(k, Number(d.count ?? 0));
-      }
-      total = data.total ?? 0;
-      services = new Set((data.logs ?? []).map((l) => l.serviceName)).size;
-      buckets = (data.histogram ?? []).map((h) => ({
-        timestamp: Number(h.timestamp ?? 0),
-        count: Number(h.count ?? 0),
-        levels: (h.levels as Record<string, number>) ?? {},
-      }));
-    }
-
-    const errors = sev.get("ERROR") ?? 0;
-    const warns = sev.get("WARN") ?? 0;
-    const severity: SeverityDatum[] = [...sev].map(([level, count]) => ({ level, count }));
+    const errors = data.severityDistribution.find((d) => d.level.toUpperCase() === "ERROR")?.count ?? 0;
+    const warns = data.severityDistribution.find((d) => d.level.toUpperCase() === "WARN")?.count ?? 0;
+    const total = data.total;
+    const services = data.serviceNames.length;
 
     return {
       total,
@@ -94,11 +39,9 @@ export default function Dashboard() {
       warns,
       services,
       errorRate: total > 0 ? (errors / total) * 100 : 0,
-      severity,
-      buckets,
-      spark: buckets.slice(-14).map((b) => b.count),
+      spark: data.histogram.slice(-14).map((b) => b.count),
     };
-  }, [data, demoLogs, demoView]);
+  }, [data]);
 
   if (authLoading || (!token && !isDemoMode)) {
     return (
@@ -197,7 +140,7 @@ export default function Dashboard() {
           {loading ? (
             <div className="skeleton" style={{ height: 132 }} />
           ) : (
-            <VolumeHistogram buckets={stats.buckets} />
+            <VolumeHistogram buckets={data.histogram} />
           )}
         </div>
 
@@ -212,7 +155,7 @@ export default function Dashboard() {
             <div className="skeleton flex-1" style={{ minHeight: 108 }} />
           ) : (
             <div className="flex-1 flex flex-col justify-end">
-              <SeverityBar data={stats.severity} />
+              <SeverityBar data={data.severityDistribution} />
             </div>
           )}
         </div>
@@ -220,38 +163,8 @@ export default function Dashboard() {
 
       {/* Stream */}
       <div className="animate-fade-up d6">
-        <LogStream />
+        <LogStream logs={data.logs} loading={loading} error={error} onRefresh={refresh} />
       </div>
     </AppShell>
   );
-}
-
-/** Group demo logs into hourly buckets so the chart has the same shape as the API's. */
-function bucketize(logs: LogEntry[]): HistogramBucket[] {
-  const HOUR = 3600_000;
-  const map = new Map<number, HistogramBucket>();
-  for (const l of logs) {
-    const t = Math.floor(new Date(l.timestamp).getTime() / HOUR) * HOUR;
-    if (!map.has(t)) map.set(t, { timestamp: t, count: 0, levels: {} });
-    const b = map.get(t)!;
-    b.count += 1;
-    const k = l.level.toUpperCase();
-    b.levels![k] = (b.levels![k] ?? 0) + 1;
-  }
-  // Demo logs span only a few seconds; spread them so the chart reads as a series.
-  const arr = [...map.values()].sort((a, b) => a.timestamp - b.timestamp);
-  if (arr.length === 1) {
-    const base = arr[0].timestamp;
-    return logs
-      .reduce<HistogramBucket[]>((acc, l, i) => {
-        const idx = Math.floor((i / logs.length) * 12);
-        acc[idx] ??= { timestamp: base - (11 - idx) * HOUR, count: 0, levels: {} };
-        acc[idx].count += 1;
-        const k = l.level.toUpperCase();
-        acc[idx].levels![k] = (acc[idx].levels![k] ?? 0) + 1;
-        return acc;
-      }, [])
-      .filter(Boolean);
-  }
-  return arr;
 }

@@ -1,16 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import {
-  ApiError,
-  fetchDemoLogs,
-  generateMockLog,
-  isDemoMode,
-  LogEntry,
-  searchLogs,
-  subscribeToLogStream,
-} from "../lib/api";
+import { useEffect, useState } from "react";
+import { generateMockLog, isDemoMode, LogEntry, subscribeToLogStream } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { SEVERITY_ORDER, severityStyle } from "../lib/severity";
 import {
@@ -34,53 +25,39 @@ const LEVEL_ICON: Record<string, React.ReactNode> = {
   DEBUG: <Bug className="w-3 h-3" />,
 };
 
-export default function LogStream() {
-  const router = useRouter();
+/**
+ * Presentational live-tail view. Its `logs` come from the caller (dashboard
+ * owns the one /logs/search request via useLogSearch) -- this component
+ * only layers SSE push updates (or, in demo mode, a synthetic trickle) on
+ * top so there's exactly one search request per refresh cycle, not two.
+ */
+export default function LogStream({
+  logs: logsProp,
+  loading,
+  error,
+  onRefresh,
+}: {
+  logs: LogEntry[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
   const { token } = useAuth();
   const demoView = isDemoMode && !token;
 
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<LogEntry[]>(logsProp);
   const [paused, setPaused] = useState(false);
   const [filterLevel, setFilterLevel] = useState<string>("ALL");
   const [query, setQuery] = useState("");
 
-  const counts = logs.reduce<Record<string, number>>((acc, l) => {
-    const lv = l.level.toUpperCase();
-    acc[lv] = (acc[lv] || 0) + 1;
-    return acc;
-  }, {});
-
-  const loadLogs = useCallback(async () => {
+  // Resync to the latest fetch from the parent -- unless paused, in which
+  // case the displayed set intentionally holds still.
+  useEffect(() => {
     if (paused) return;
+    setLogs(logsProp);
+  }, [logsProp, paused]);
 
-    if (demoView) {
-      setLogs(fetchDemoLogs(40));
-      setError(null);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const response = await searchLogs({
-        levels: filterLevel !== "ALL" ? [filterLevel] : undefined,
-        size: 150,
-      });
-      setLogs(response.logs);
-      setError(null);
-    } catch (err: unknown) {
-      if (err instanceof ApiError && err.status === 401) {
-        router.replace("/signin");
-        return;
-      }
-      setError(err instanceof Error ? err.message : "Failed to fetch logs");
-    } finally {
-      setLoading(false);
-    }
-  }, [paused, filterLevel, demoView, router]);
-
-  // Demo mode: synthesize a trickle of new rows
+  // Demo mode: synthesize a trickle of new rows, standing in for SSE.
   useEffect(() => {
     if (!demoView || paused) return;
     const id = setInterval(() => {
@@ -89,7 +66,7 @@ export default function LogStream() {
     return () => clearInterval(id);
   }, [demoView, paused]);
 
-  // Real mode: org-scoped SSE live tail
+  // Real mode: org-scoped SSE live tail layered on top of the polled base.
   useEffect(() => {
     if (demoView || paused) return;
     return subscribeToLogStream(
@@ -98,12 +75,11 @@ export default function LogStream() {
     );
   }, [demoView, paused]);
 
-  useEffect(() => {
-    setLoading(true);
-    loadLogs();
-    const id = setInterval(loadLogs, demoView ? 6000 : 20000);
-    return () => clearInterval(id);
-  }, [loadLogs, demoView]);
+  const counts = logs.reduce<Record<string, number>>((acc, l) => {
+    const lv = l.level.toUpperCase();
+    acc[lv] = (acc[lv] || 0) + 1;
+    return acc;
+  }, {});
 
   const displayed = logs.filter((l) => {
     if (filterLevel !== "ALL" && l.level.toUpperCase() !== filterLevel) return false;
@@ -230,7 +206,7 @@ export default function LogStream() {
             {paused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
             {paused ? "Resume" : "Pause"}
           </button>
-          <button onClick={loadLogs} className="btn btn-ghost" style={{ padding: 7 }} title="Refresh">
+          <button onClick={onRefresh} className="btn btn-ghost" style={{ padding: 7 }} title="Refresh">
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
           <button onClick={exportCsv} className="btn btn-ghost" style={{ padding: 7 }} title="Export CSV">
