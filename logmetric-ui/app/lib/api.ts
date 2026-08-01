@@ -123,7 +123,7 @@ interface AuthApiResponse {
 
 // ===== Config =====
 
-const API_BASE_URL =
+export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081/api";
 
 /**
@@ -245,6 +245,33 @@ export async function searchLogs(
 
   const body = await parseJsonResponse<unknown>(response);
   return normalizeSearchResponse(body);
+}
+
+// ===== API keys (authenticated, ADMIN only) =====
+
+/**
+ * The raw key is only ever returned by this call -- the server stores it
+ * hashed and cannot show it again. There is no corresponding "list keys"
+ * endpoint yet, so the UI must not pretend one exists.
+ */
+export async function generateApiKey(): Promise<string> {
+  const token = getToken();
+  if (!token) {
+    throw new ApiError(401, "Not authenticated");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/keys/generate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(8000),
+  });
+
+  if (response.status === 401) {
+    clearStoredAuth();
+  }
+
+  const body = await parseJsonResponse<{ apiKey: string }>(response);
+  return body.apiKey;
 }
 
 // ===== Live tail (SSE, authenticated) =====
