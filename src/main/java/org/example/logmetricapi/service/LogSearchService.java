@@ -1,11 +1,14 @@
 package org.example.logmetricapi.service;
 
+import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
 import co.elastic.clients.elasticsearch._types.aggregations.CalendarInterval;
 import co.elastic.clients.elasticsearch._types.aggregations.DateHistogramAggregation;
 import co.elastic.clients.elasticsearch._types.aggregations.TermsAggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.TopHitsAggregation;
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.json.JsonData;
 import org.example.logmetricapi.dto.LogSearchRequest;
 import org.example.logmetricapi.dto.LogSearchResponse;
@@ -81,10 +84,23 @@ public class LogSearchService {
         // Terms Aggregation for Severity Distribution
         Aggregation severityDist = Aggregation.of(a -> a.terms(TermsAggregation.of(t -> t.field("level"))));
 
+        // Terms Aggregation for the set of services present in the org -- used to
+        // populate the Explorer's service filter regardless of what's on this page of hits.
+        Aggregation serviceNamesAgg = Aggregation.of(a -> a.terms(TermsAggregation.of(t -> t.field("serviceName").size(100))));
+
+        // Terms Aggregation for pattern clusters (SHA-256 template hash), with a
+        // per-cluster severity breakdown and one representative sample document.
+        Aggregation patternClustersAgg = Aggregation.of(a -> a.terms(TermsAggregation.of(t -> t.field("patternHash").size(50)))
+                .aggregations("by_level", Aggregation.of(sub -> sub.terms(TermsAggregation.of(t -> t.field("level")))))
+                .aggregations("sample", Aggregation.of(sub -> sub.topHits(TopHitsAggregation.of(th -> th.size(1))))));
+
         NativeQuery nativeQuery = NativeQuery.builder()
                 .withQuery(query)
+                .withSort(s -> s.field(f -> f.field("timestamp").order(SortOrder.Desc)))
                 .withAggregation("histogram", dateHistogram)
                 .withAggregation("severityDistribution", severityDist)
+                .withAggregation("serviceNames", serviceNamesAgg)
+                .withAggregation("patternClusters", patternClustersAgg)
                 .withPageable(PageRequest.of(request.getPage(), request.getSize()))
                 .build();
 
@@ -101,6 +117,8 @@ public class LogSearchService {
 
         response.setHistogram(parseHistogram(searchHits));
         response.setSeverityDistribution(parseSeverityDistribution(searchHits));
+        response.setServiceNames(parseServiceNames(searchHits));
+        response.setPatternClusters(parsePatternClusters(searchHits));
 
         return response;
     }
@@ -157,6 +175,87 @@ public class LogSearchService {
                     Map<String, Object> bucketMap = new HashMap<>();
                     bucketMap.put("level", bucket.key().stringValue());
                     bucketMap.put("count", bucket.docCount());
+                    result.add(bucketMap);
+                });
+            }
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> parseServiceNames(SearchHits<LogEntry> searchHits) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (searchHits.getAggregations() != null) {
+            org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations aggregations =
+                (org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations) searchHits.getAggregations();
+
+            org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation elasticsearchAggregation =
+                (org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation) aggregations.aggregationsAsMap().get("serviceNames");
+
+            co.elastic.clients.elasticsearch._types.aggregations.Aggregate aggregate =
+                elasticsearchAggregation != null ? elasticsearchAggregation.aggregation().getAggregate() : null;
+
+            if (aggregate != null && aggregate.isSterms()) {
+                aggregate.sterms().buckets().array().forEach(bucket -> {
+                    Map<String, Object> bucketMap = new HashMap<>();
+                    bucketMap.put("name", bucket.key().stringValue());
+                    bucketMap.put("count", bucket.docCount());
+                    result.add(bucketMap);
+                });
+            }
+        }
+        return result;
+    }
+
+    /**
+     * "sample" is a top_hits(size=1) sub-aggregation, so its source document
+     * deserializes straight into a LogEntry via the client's attached mapper --
+     * no manual JSON field extraction needed.
+     */
+    private List<Map<String, Object>> parsePatternClusters(SearchHits<LogEntry> searchHits) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (searchHits.getAggregations() != null) {
+            org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations aggregations =
+                (org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations) searchHits.getAggregations();
+
+            org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation elasticsearchAggregation =
+                (org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation) aggregations.aggregationsAsMap().get("patternClusters");
+
+            co.elastic.clients.elasticsearch._types.aggregations.Aggregate aggregate =
+                elasticsearchAggregation != null ? elasticsearchAggregation.aggregation().getAggregate() : null;
+
+            if (aggregate != null && aggregate.isSterms()) {
+                aggregate.sterms().buckets().array().forEach(bucket -> {
+                    Map<String, Object> bucketMap = new HashMap<>();
+                    bucketMap.put("patternHash", bucket.key().stringValue());
+                    bucketMap.put("count", bucket.docCount());
+
+                    Map<String, Long> levels = new HashMap<>();
+                    if (bucket.aggregations().containsKey("by_level")) {
+                        co.elastic.clients.elasticsearch._types.aggregations.Aggregate levelAgg = bucket.aggregations().get("by_level");
+                        if (levelAgg.isSterms()) {
+                            levelAgg.sterms().buckets().array().forEach(lvlBucket -> {
+                                levels.put(lvlBucket.key().stringValue(), lvlBucket.docCount());
+                            });
+                        }
+                    }
+                    bucketMap.put("levels", levels);
+
+                    if (bucket.aggregations().containsKey("sample")) {
+                        co.elastic.clients.elasticsearch._types.aggregations.Aggregate sampleAgg = bucket.aggregations().get("sample");
+                        if (sampleAgg.isTopHits()) {
+                            List<Hit<JsonData>> hits = sampleAgg.topHits().hits().hits();
+                            JsonData sampleSource = hits.isEmpty() ? null : hits.get(0).source();
+                            // LogEntry has no Jackson-visible default constructor (only the
+                            // Spring Data @PersistenceCreator one), so .to(LogEntry.class) fails.
+                            // Read the two fields we need straight off the raw JSON object instead.
+                            if (sampleSource != null) {
+                                jakarta.json.JsonObject sampleJson = sampleSource.toJson().asJsonObject();
+                                bucketMap.put("sampleMessage", sampleJson.getString("message", null));
+                                bucketMap.put("sampleService", sampleJson.getString("serviceName", null));
+                            }
+                        }
+                    }
+
                     result.add(bucketMap);
                 });
             }
