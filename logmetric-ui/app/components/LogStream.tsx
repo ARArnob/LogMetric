@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { generateMockLog, isDemoMode, LogEntry, subscribeToLogStream } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { SEVERITY_ORDER, severityStyle } from "../lib/severity";
@@ -331,9 +332,14 @@ export default function LogStream({
                       style={{ color: "var(--text-muted)", fontSize: 10 }}
                     >
                       {log.patternHash ? (
-                        <span className="px-1.5 py-0.5 rounded" style={{ background: "var(--bg-inset)" }}>
+                        <Link
+                          href={`/patterns?hash=${encodeURIComponent(log.patternHash)}`}
+                          className="px-1.5 py-0.5 rounded transition-colors"
+                          style={{ background: "var(--bg-inset)", textDecoration: "none" }}
+                          title="View this pattern"
+                        >
                           {log.patternHash.substring(0, 8)}
-                        </span>
+                        </Link>
                       ) : (
                         "—"
                       )}

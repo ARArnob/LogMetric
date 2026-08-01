@@ -46,6 +46,8 @@ export interface PatternCluster {
   levels: Record<string, number>;
   sampleMessage?: string;
   sampleService?: string;
+  serviceCount?: number;
+  dominantService?: string;
 }
 
 export interface LogSearchResponse {
@@ -94,6 +96,8 @@ function normalizeSearchResponse(raw: unknown): LogSearchResponse {
         levels: Object.fromEntries(Object.entries(levels).map(([k, v]) => [k, Number(v)])),
         sampleMessage: bucket.sampleMessage != null ? String(bucket.sampleMessage) : undefined,
         sampleService: bucket.sampleService != null ? String(bucket.sampleService) : undefined,
+        serviceCount: bucket.serviceCount != null ? Number(bucket.serviceCount) : undefined,
+        dominantService: bucket.dominantService != null ? String(bucket.dominantService) : undefined,
       };
     }),
   };

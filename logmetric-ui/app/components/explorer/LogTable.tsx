@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AlertCircle, AlertTriangle, Info, Activity, Bug } from "lucide-react";
 import { LogEntry } from "../../lib/api";
 import { severityStyle } from "../../lib/severity";
@@ -120,9 +121,15 @@ export default function LogTable({
                       style={{ color: "var(--text-muted)", fontSize: 10 }}
                     >
                       {log.patternHash ? (
-                        <span className="px-1.5 py-0.5 rounded" style={{ background: "var(--bg-inset)" }}>
+                        <Link
+                          href={`/patterns?hash=${encodeURIComponent(log.patternHash)}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="px-1.5 py-0.5 rounded transition-colors"
+                          style={{ background: "var(--bg-inset)", textDecoration: "none" }}
+                          title="View this pattern"
+                        >
                           {log.patternHash.substring(0, 8)}
-                        </span>
+                        </Link>
                       ) : (
                         "—"
                       )}
