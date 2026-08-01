@@ -175,6 +175,14 @@ export function clearStoredAuth(): void {
   sessionStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
+/** Rewrites just the user portion of stored auth, preserving the token and whichever storage (local/session) is already in use. */
+export function updateStoredUser(user: AuthUser): void {
+  const stored = getStoredAuth();
+  if (!stored) return;
+  const persistent = localStorage.getItem(AUTH_STORAGE_KEY) !== null;
+  setStoredAuth({ token: stored.token, user }, persistent);
+}
+
 export function getToken(): string | null {
   return getStoredAuth()?.token ?? null;
 }
@@ -254,6 +262,16 @@ export async function registerWithInvite(
     body: JSON.stringify({ email, password, inviteCode }),
   });
   return parseJsonResponse<AuthApiResponse>(response);
+}
+
+/** The caller's own record, read fresh from the DB -- used to detect a role change without waiting for re-login. */
+export async function getCurrentUser(): Promise<AuthUser> {
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) clearStoredAuth();
+  return parseJsonResponse<AuthUser>(response);
 }
 
 // ===== Log search (authenticated) =====

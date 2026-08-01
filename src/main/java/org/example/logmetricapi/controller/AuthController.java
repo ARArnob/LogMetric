@@ -2,6 +2,7 @@ package org.example.logmetricapi.controller;
 
 import jakarta.validation.Valid;
 import org.example.logmetricapi.dto.AuthResponse;
+import org.example.logmetricapi.dto.CurrentUserResponse;
 import org.example.logmetricapi.dto.LoginRequest;
 import org.example.logmetricapi.dto.RegisterRequest;
 import org.example.logmetricapi.dto.RegisterWithInviteRequest;
@@ -12,11 +13,14 @@ import org.example.logmetricapi.repository.OrganizationRepository;
 import org.example.logmetricapi.repository.UserRepository;
 import org.example.logmetricapi.service.InviteService;
 import org.example.logmetricapi.service.JwtService;
+import org.example.logmetricapi.util.AuthUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -135,6 +139,24 @@ public class AuthController {
                 user.getEmail(),
                 user.getRole().name(),
                 user.getOrganization().getId()
+        ));
+    }
+
+    /**
+     * Reads the caller's own record fresh from the DB (via CustomUserDetailsService,
+     * same as every other endpoint's role check) so the frontend can detect a
+     * role change without waiting for the JWT to expire or the user to re-login.
+     */
+    @GetMapping("/me")
+    public ResponseEntity<CurrentUserResponse> me() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        User user = AuthUtils.requireUser(authentication);
+
+        return ResponseEntity.ok(new CurrentUserResponse(
+                user.getEmail(),
+                user.getRole().name(),
+                user.getOrganization().getId(),
+                user.getOrganization().getName()
         ));
     }
 }
