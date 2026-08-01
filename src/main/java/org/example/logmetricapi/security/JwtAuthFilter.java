@@ -1,5 +1,6 @@
 package org.example.logmetricapi.security;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,6 +11,7 @@ import org.example.logmetricapi.service.JwtService;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -35,8 +37,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userEmail;
 
         // Proceed to the next filter if the Authorization header is missing or invalid
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -44,27 +44,36 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Extract token and user email
-        jwt = authHeader.substring(7);
-        userEmail = jwtService.extractEmail(jwt);
+        final String jwt = authHeader.substring(7);
 
-        // Authenticate if email is present and no authentication exists in the context
-        if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
+        try {
+            final String userEmail = jwtService.extractEmail(jwt);
 
-            // Validate the token
-            if (jwtService.isTokenValid(jwt, userDetails)) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            // Authenticate if email is present and no authentication exists in the context
+            if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
 
-                // Update Security Context
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                // Validate the token
+                if (jwtService.isTokenValid(jwt, userDetails)) {
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                    // Update Security Context
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
             }
+        } catch (JwtException | UsernameNotFoundException e) {
+            // Malformed, forged, or expired token, or a user that no longer
+            // exists -- treat the request as unauthenticated instead of
+            // failing with a 500. Downstream authorization then produces a
+            // clean 401 via the configured AuthenticationEntryPoint.
+            SecurityContextHolder.clearContext();
         }
+
         filterChain.doFilter(request, response);
     }
 }
