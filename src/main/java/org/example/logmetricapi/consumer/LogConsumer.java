@@ -30,6 +30,13 @@ public class LogConsumer {
             log.setUserId("SYSTEM");
         }
 
+        // Most producers report events, not clocks -- stamp arrival time when the
+        // client didn't set one, so search sort and the histogram aggregation
+        // always have a value to work with.
+        if (log.getTimestamp() == null) {
+            log.setTimestamp(java.time.Instant.now());
+        }
+
         String rawMessage = log.getMessage();
         String cleansed = patternService.cleanser(rawMessage);
         String hash = patternService.generateHash(cleansed);

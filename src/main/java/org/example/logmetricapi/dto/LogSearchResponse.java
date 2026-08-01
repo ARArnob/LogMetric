@@ -9,16 +9,24 @@ public class LogSearchResponse {
     private long total;
     private List<Map<String, Object>> histogram;
     private List<Map<String, Object>> severityDistribution;
+    private List<Map<String, Object>> serviceNames;
+    private List<Map<String, Object>> patternClusters;
 
     public List<LogEntry> getLogs() { return logs; }
     public void setLogs(List<LogEntry> logs) { this.logs = logs; }
-    
+
     public long getTotal() { return total; }
     public void setTotal(long total) { this.total = total; }
-    
+
     public List<Map<String, Object>> getHistogram() { return histogram; }
     public void setHistogram(List<Map<String, Object>> histogram) { this.histogram = histogram; }
-    
+
     public List<Map<String, Object>> getSeverityDistribution() { return severityDistribution; }
     public void setSeverityDistribution(List<Map<String, Object>> severityDistribution) { this.severityDistribution = severityDistribution; }
+
+    public List<Map<String, Object>> getServiceNames() { return serviceNames; }
+    public void setServiceNames(List<Map<String, Object>> serviceNames) { this.serviceNames = serviceNames; }
+
+    public List<Map<String, Object>> getPatternClusters() { return patternClusters; }
+    public void setPatternClusters(List<Map<String, Object>> patternClusters) { this.patternClusters = patternClusters; }
 }
