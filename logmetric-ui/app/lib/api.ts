@@ -21,6 +21,7 @@ export interface LogSearchRequest {
   page?: number;
   size?: number;
   systemId?: string;
+  patternHash?: string;
 }
 
 export interface HistogramBucket {

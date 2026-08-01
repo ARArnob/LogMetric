@@ -173,9 +173,12 @@ export function useLogSearch(
   useEffect(() => {
     if (authLoading) return;
     run(filtersRef.current);
-    const id = setInterval(() => run(filtersRef.current), pollMs);
+    // pollMs <= 0 opts out of background polling -- e.g. a paginated
+    // Explorer view shouldn't have its page silently reset out from under
+    // the user every 20s the way a live dashboard should refresh.
+    const id = pollMs > 0 ? setInterval(() => run(filtersRef.current), pollMs) : undefined;
     return () => {
-      clearInterval(id);
+      if (id) clearInterval(id);
       clearTimeout(debounceRef.current);
       abortRef.current?.abort();
     };
