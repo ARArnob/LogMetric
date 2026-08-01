@@ -379,6 +379,12 @@ input::placeholder { color: var(--text-muted); }
 @keyframes growUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 .grow-up { transform-origin: bottom; animation: growUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.toast-enter { animation: toastIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
 /* ============================================================
    SCROLLBAR
    ============================================================ */

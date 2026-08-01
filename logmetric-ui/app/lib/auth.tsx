@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { AuthUser, clearStoredAuth, getStoredAuth, setStoredAuth } from "./api";
 
 interface AuthContextValue {
@@ -52,4 +53,16 @@ export function useAuth(): AuthContextValue {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return ctx;
+}
+
+/** Redirects to /signin once the stored auth has been checked and none was found. */
+export function useRequireAuth(): { loading: boolean } {
+  const { token, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !token) router.replace("/signin");
+  }, [loading, token, router]);
+
+  return { loading: loading || !token };
 }

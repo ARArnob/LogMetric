@@ -2,37 +2,50 @@
 
 import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
   LayoutDashboard,
   ScrollText,
+  GitBranch,
   BellRing,
-  Network,
   Settings,
+  Users,
   LogOut,
   Menu,
   X,
-  Lock,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { useAuth } from "../lib/auth";
 
-/**
- * Nav items marked `soon` have no backend behind them yet (Systems/Alerts
- * need Phase 1/3 server work) -- they render visibly disabled rather than
- * as links that go nowhere.
- */
-const NAV = [
-  { href: "/dashboard", label: "Live Telemetry", icon: LayoutDashboard, soon: false },
-  { href: "/dashboard", label: "Log Explorer", icon: ScrollText, soon: true },
-  { href: "/dashboard", label: "Alerts", icon: BellRing, soon: true },
-  { href: "/dashboard", label: "Topology", icon: Network, soon: true },
-  { href: "/dashboard", label: "Settings", icon: Settings, soon: true },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  adminOnly?: boolean;
+}
+
+const NAV: NavItem[] = [
+  { href: "/dashboard", label: "Live Telemetry", icon: LayoutDashboard },
+  { href: "/explorer", label: "Log Explorer", icon: ScrollText },
+  { href: "/patterns", label: "Pattern Clusters", icon: GitBranch },
+  { href: "/alerts", label: "Alerts", icon: BellRing },
+  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/team", label: "Team", icon: Users, adminOnly: true },
 ];
 
-export default function AppShell({ children }: { children: ReactNode }) {
+export default function AppShell({
+  children,
+  title,
+  description,
+}: {
+  children: ReactNode;
+  /** Optional page-header slot so pages don't each reinvent a heading. */
+  title?: string;
+  description?: string;
+}) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, token, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -42,6 +55,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   const initial = user?.email?.[0]?.toUpperCase() ?? "?";
+  const visibleNav = NAV.filter((item) => !item.adminOnly || user?.role === "ADMIN");
 
   const sidebar = (
     <>
@@ -64,32 +78,27 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <nav className="px-2 flex-1">
-        {NAV.map((item, i) => {
+        {visibleNav.map((item) => {
           const Icon = item.icon;
-          const active = i === 0;
+          const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
           return (
-            <button
-              key={item.label}
-              disabled={item.soon}
-              onClick={() => !item.soon && setMobileOpen(false)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg mb-0.5 text-left transition-colors"
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMobileOpen(false)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg mb-0.5 transition-colors"
               style={{
                 background: active ? "var(--accent-dim)" : "transparent",
-                color: active
-                  ? "var(--accent)"
-                  : item.soon
-                    ? "var(--text-muted)"
-                    : "var(--text-secondary)",
-                cursor: item.soon ? "not-allowed" : "pointer",
+                color: active ? "var(--accent)" : "var(--text-secondary)",
                 border: "1px solid",
                 borderColor: active ? "var(--accent-dim)" : "transparent",
+                textDecoration: "none",
               }}
-              title={item.soon ? "Not built yet — needs backend work" : undefined}
+              aria-current={active ? "page" : undefined}
             >
               <Icon className="w-4 h-4 shrink-0" />
               <span className="text-[13px] font-medium flex-1">{item.label}</span>
-              {item.soon && <Lock className="w-3 h-3 shrink-0 opacity-60" />}
-            </button>
+            </Link>
           );
         })}
       </nav>
@@ -192,7 +201,23 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <ThemeToggle />
         </header>
 
-        <main className="flex-1 px-5 py-6 md:px-8 md:py-8 w-full">{children}</main>
+        <main className="flex-1 px-5 py-6 md:px-8 md:py-8 w-full">
+          {(title || description) && (
+            <div className="mb-6 animate-fade-up">
+              {title && (
+                <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: "var(--text-primary)" }}>
+                  {title}
+                </h1>
+              )}
+              {description && (
+                <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+                  {description}
+                </p>
+              )}
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

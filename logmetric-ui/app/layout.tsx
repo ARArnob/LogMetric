@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "./lib/auth";
 import { ThemeProvider, themeInitScript } from "./lib/theme";
+import { ToastProvider } from "./lib/toast";
 
 export const metadata: Metadata = {
   title: "LogMetric — Intelligent Log Telemetry",
@@ -28,7 +29,9 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col antialiased">
         <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
