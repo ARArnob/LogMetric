@@ -17,7 +17,7 @@ const KEYWORD_DEBOUNCE_MS = 300;
 const HOUR_MS = 3600_000;
 
 function emptyResponse(): LogSearchResponse {
-  return { logs: [], total: 0, histogram: [], severityDistribution: [], serviceNames: [], patternClusters: [] };
+  return { logs: [], total: 0, histogram: [], severityDistribution: [], serviceNames: [], patternClusters: [], histogramInterval: "hour" };
 }
 
 /** Groups demo logs into hourly buckets, same shape the API's date histogram returns. */
@@ -69,6 +69,7 @@ function demoResponse(size: number): LogSearchResponse {
     severityDistribution: [...severity].map(([level, count]) => ({ level, count })),
     serviceNames: [...services].map(([name, count]) => ({ name, count })),
     patternClusters: [],
+    histogramInterval: "hour",
   };
 }
 

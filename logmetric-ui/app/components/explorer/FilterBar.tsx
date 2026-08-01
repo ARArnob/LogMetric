@@ -2,19 +2,11 @@
 
 import { Search } from "lucide-react";
 import MultiSelect from "../ui/MultiSelect";
-import Select from "../ui/Select";
+import TimeRangePicker, { TimeRangeValue } from "../TimeRangePicker";
 import { ServiceBucket, SeverityBucket } from "../../lib/api";
 import { SEVERITY, SEVERITY_ORDER } from "../../lib/severity";
 
-export const TIME_PRESETS = [
-  { id: "15m", label: "Last 15 minutes", ms: 15 * 60_000 },
-  { id: "1h", label: "Last hour", ms: 60 * 60_000 },
-  { id: "6h", label: "Last 6 hours", ms: 6 * 60 * 60_000 },
-  { id: "24h", label: "Last 24 hours", ms: 24 * 60 * 60_000 },
-  { id: "7d", label: "Last 7 days", ms: 7 * 24 * 60 * 60_000 },
-  { id: "30d", label: "Last 30 days", ms: 30 * 24 * 60 * 60_000 },
-  { id: "all", label: "All time", ms: 0 },
-] as const;
+export { TIME_PRESETS } from "../TimeRangePicker";
 
 export default function FilterBar({
   keyword,
@@ -25,7 +17,7 @@ export default function FilterBar({
   onServicesChange,
   serviceOptions,
   severityOptions,
-  timeRangeId,
+  timeRange,
   onTimeRangeChange,
 }: {
   keyword: string;
@@ -36,8 +28,8 @@ export default function FilterBar({
   onServicesChange: (v: string[]) => void;
   serviceOptions: ServiceBucket[];
   severityOptions: SeverityBucket[];
-  timeRangeId: string;
-  onTimeRangeChange: (id: string) => void;
+  timeRange: TimeRangeValue;
+  onTimeRangeChange: (v: TimeRangeValue) => void;
 }) {
   const severityCounts = new Map(severityOptions.map((s) => [s.level.toUpperCase(), s.count]));
 
@@ -81,14 +73,7 @@ export default function FilterBar({
         />
       </div>
 
-      <div className="w-full md:w-44">
-        <Select
-          ariaLabel="Time range"
-          value={timeRangeId}
-          onChange={onTimeRangeChange}
-          options={TIME_PRESETS.map((p) => ({ value: p.id, label: p.label }))}
-        />
-      </div>
+      <TimeRangePicker value={timeRange} onChange={onTimeRangeChange} />
     </div>
   );
 }

@@ -57,6 +57,8 @@ export interface LogSearchResponse {
   severityDistribution: SeverityBucket[];
   serviceNames: ServiceBucket[];
   patternClusters: PatternCluster[];
+  /** "minute" | "hour" | "day" | "week" -- the calendar interval the backend actually bucketed by, so the chart's axis label can never contradict the data (F13). */
+  histogramInterval: string;
 }
 
 // The backend returns aggregation buckets as Map<String,Object>, so numbers
@@ -100,6 +102,7 @@ function normalizeSearchResponse(raw: unknown): LogSearchResponse {
         dominantService: bucket.dominantService != null ? String(bucket.dominantService) : undefined,
       };
     }),
+    histogramInterval: typeof r.histogramInterval === "string" ? r.histogramInterval : "hour",
   };
 }
 

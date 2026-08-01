@@ -49,7 +49,11 @@ export default function ClusterDetail({ hash, onBack }: { hash: string; onBack: 
           <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
             This pattern only
           </p>
-          {loading ? <div className="skeleton" style={{ height: 132 }} /> : <VolumeHistogram buckets={data.histogram} />}
+          {loading ? (
+            <div className="skeleton" style={{ height: 132 }} />
+          ) : (
+            <VolumeHistogram buckets={data.histogram} interval={data.histogramInterval} />
+          )}
         </div>
 
         <div className="card card-sheen p-5 flex flex-col animate-fade-up">

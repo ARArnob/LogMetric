@@ -1,22 +1,82 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Activity, AlertCircle, AlertTriangle, Layers, Server } from "lucide-react";
 import AppShell from "../components/AppShell";
 import LogStream from "../components/LogStream";
 import StatTile from "../components/charts/StatTile";
 import SeverityBar from "../components/charts/SeverityBar";
 import VolumeHistogram from "../components/charts/VolumeHistogram";
+import TimeRangePicker, { TimeRangeValue, presetRange } from "../components/TimeRangePicker";
 import { useAuth } from "../lib/auth";
 import { isDemoMode } from "../lib/api";
 import { useLogSearch } from "../lib/useLogSearch";
 import { compactNumber } from "../lib/severity";
 
+const RANGE_STORAGE_KEY = "logmetric_dashboard_range";
+
+function readInitialRange(searchParams: URLSearchParams): TimeRangeValue {
+  const id = searchParams.get("range");
+  if (id) {
+    if (id === "custom") {
+      const start = searchParams.get("start");
+      const end = searchParams.get("end");
+      return { id, startDate: start ? Number(start) : undefined, endDate: end ? Number(end) : undefined };
+    }
+    return { id, ...presetRange(id) };
+  }
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem(RANGE_STORAGE_KEY);
+    if (stored) {
+      try {
+        return JSON.parse(stored) as TimeRangeValue;
+      } catch {
+        // fall through to default
+      }
+    }
+  }
+  return { id: "all" };
+}
+
+function rangeToParams(range: TimeRangeValue): URLSearchParams {
+  const params = new URLSearchParams();
+  if (range.id !== "all") {
+    params.set("range", range.id);
+    if (range.id === "custom") {
+      if (range.startDate) params.set("start", String(range.startDate));
+      if (range.endDate) params.set("end", String(range.endDate));
+    }
+  }
+  return params;
+}
+
 export default function Dashboard() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg-base)", color: "var(--text-muted)" }}>
+          <div className="flex items-center gap-3 text-sm">
+            <Activity className="w-4 h-4 animate-spin" style={{ color: "var(--accent)" }} />
+            Loading…
+          </div>
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+function DashboardContent() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { token, loading: authLoading } = useAuth();
   const demoView = isDemoMode && !token;
+
+  const [range, setRange] = useState<TimeRangeValue>(() => readInitialRange(searchParams));
+  const lastPushedRef = useRef(searchParams.toString());
 
   useEffect(() => {
     if (!authLoading && !token && !isDemoMode) router.replace("/signin");
@@ -24,7 +84,24 @@ export default function Dashboard() {
 
   // Single owner of the search request -- LogStream reads the same result
   // via props instead of polling /logs/search a second time.
-  const { data, loading, error, refresh } = useLogSearch({ size: 200 });
+  const { data, loading, error, setFilters, refresh } = useLogSearch({
+    size: 200,
+    startDate: range.startDate,
+    endDate: range.endDate,
+  });
+
+  function handleRangeChange(next: TimeRangeValue) {
+    setRange(next);
+    setFilters({ startDate: next.startDate, endDate: next.endDate });
+    try {
+      localStorage.setItem(RANGE_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // storage unavailable -- range still applies for this session
+    }
+    const qs = rangeToParams(next).toString();
+    lastPushedRef.current = qs;
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
 
   // ---- Stats derived from real response data (never hardcoded) ----
   const stats = useMemo(() => {
@@ -69,18 +146,21 @@ export default function Dashboard() {
             Real-time ingestion, pattern clustering, and anomaly detection — scoped to your organization.
           </p>
         </div>
-        {demoView && (
-          <span
-            className="text-[10px] font-bold px-2.5 py-1 rounded-full tracking-widest uppercase"
-            style={{
-              background: "var(--sev-warn-dim)",
-              color: "var(--sev-warn)",
-              border: "1px solid var(--sev-warn)",
-            }}
-          >
-            Demo mode · synthetic data
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {demoView && (
+            <span
+              className="text-[10px] font-bold px-2.5 py-1 rounded-full tracking-widest uppercase"
+              style={{
+                background: "var(--sev-warn-dim)",
+                color: "var(--sev-warn)",
+                border: "1px solid var(--sev-warn)",
+              }}
+            >
+              Demo mode · synthetic data
+            </span>
+          )}
+          <TimeRangePicker value={range} onChange={handleRangeChange} />
+        </div>
       </div>
 
       {/* KPI row -- every value computed from the response above */}
@@ -135,12 +215,16 @@ export default function Dashboard() {
             Ingest volume
           </h2>
           <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
-            Hourly buckets, stacked by severity
+            {data.histogramInterval}-bucketed, stacked by severity — drag to zoom into a window
           </p>
           {loading ? (
             <div className="skeleton" style={{ height: 132 }} />
           ) : (
-            <VolumeHistogram buckets={data.histogram} />
+            <VolumeHistogram
+              buckets={data.histogram}
+              interval={data.histogramInterval}
+              onBrush={(start, end) => handleRangeChange({ id: "custom", startDate: start, endDate: end })}
+            />
           )}
         </div>
 
