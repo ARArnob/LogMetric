@@ -190,9 +190,26 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Thrown for MethodArgumentNotValidException responses -- GlobalExceptionHandler
+ * returns a field->message map instead of a single top-level `message`, so
+ * these need to be routed to the right input, not dumped as one string.
+ */
+export class ValidationError extends ApiError {
+  fields: Record<string, string>;
+  constructor(fields: Record<string, string>) {
+    super(400, "Validation failed");
+    this.name = "ValidationError";
+    this.fields = fields;
+  }
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => null);
+    if (body && typeof body === "object" && "fields" in body && body.fields && typeof body.fields === "object") {
+      throw new ValidationError(body.fields as Record<string, string>);
+    }
     const message =
       (body && typeof body === "object" && "message" in body && (body as { message?: string }).message) ||
       `Request failed with status ${response.status}`;
@@ -221,6 +238,20 @@ export async function register(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, organizationName }),
+  });
+  return parseJsonResponse<AuthApiResponse>(response);
+}
+
+/** Joins an existing organization as a USER by redeeming a single-use invite code. */
+export async function registerWithInvite(
+  email: string,
+  password: string,
+  inviteCode: string
+): Promise<AuthApiResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/register-with-invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, inviteCode }),
   });
   return parseJsonResponse<AuthApiResponse>(response);
 }
