@@ -352,6 +352,16 @@ input::placeholder { color: var(--text-muted); }
 }
 .log-row-enter { animation: slideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
+.log-row { cursor: pointer; }
+.log-row:hover, .log-row:focus-within { background: var(--bg-elevated); }
+.log-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+@keyframes rowFlash {
+  0% { background-color: var(--accent-dim); }
+  100% { background-color: transparent; }
+}
+.log-row-flash { animation: rowFlash 1.1s ease-out; }
+
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(22px); }
   to { opacity: 1; transform: translateY(0); }
