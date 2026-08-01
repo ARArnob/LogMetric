@@ -4,7 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-public class RegisterRequest {
+public class RegisterWithInviteRequest {
 
     @NotBlank(message = "Email is required")
     @Email(message = "Email must be a valid address")
@@ -14,10 +14,10 @@ public class RegisterRequest {
     @Size(min = 8, message = "Password must be at least 8 characters")
     private String password;
 
-    @NotBlank(message = "Organization name is required")
-    private String organizationName;
+    @NotBlank(message = "Invite code is required")
+    private String inviteCode;
 
-    public RegisterRequest() {
+    public RegisterWithInviteRequest() {
     }
 
     public String getEmail() {
@@ -36,11 +36,11 @@ public class RegisterRequest {
         this.password = password;
     }
 
-    public String getOrganizationName() {
-        return organizationName;
+    public String getInviteCode() {
+        return inviteCode;
     }
 
-    public void setOrganizationName(String organizationName) {
-        this.organizationName = organizationName;
+    public void setInviteCode(String inviteCode) {
+        this.inviteCode = inviteCode;
     }
 }

@@ -2,14 +2,15 @@ package org.example.logmetricapi.service;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.example.logmetricapi.model.User; // Imported custom User model
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -18,11 +19,26 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
+    private static final int MIN_SECRET_BYTES = 32; // HS256 requires a >=256-bit key
+
     @Value("${jwt.secret}")
     private String secretKey;
 
     @Value("${jwt.expiration}")
     private long jwtExpiration;
+
+    /**
+     * Fails fast at startup rather than at first login if JWT_SECRET is too
+     * short for HS256 -- a plain UTF-8 string, not Base64, per getSignInKey().
+     */
+    @PostConstruct
+    public void validateSecret() {
+        if (secretKey == null || secretKey.getBytes(StandardCharsets.UTF_8).length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException(
+                    "jwt.secret must be at least " + MIN_SECRET_BYTES + " bytes long for HS256. " +
+                            "Set the JWT_SECRET environment variable to a strong random value.");
+        }
+    }
 
     /**
      * Extracts the email (stored as the JWT subject) from a token.
@@ -101,7 +117,7 @@ public class JwtService {
     }
 
     private SecretKey getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
+        byte[] keyBytes = secretKey.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 }

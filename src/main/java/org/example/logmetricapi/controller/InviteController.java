@@ -1,8 +1,10 @@
 package org.example.logmetricapi.controller;
 
+import org.example.logmetricapi.dto.InviteResponse;
+import org.example.logmetricapi.model.InviteToken;
 import org.example.logmetricapi.model.Organization;
 import org.example.logmetricapi.repository.OrganizationRepository;
-import org.example.logmetricapi.service.ApiKeyService;
+import org.example.logmetricapi.service.InviteService;
 import org.example.logmetricapi.util.AuthUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,34 +16,29 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Map;
-import java.util.Optional;
-
 @RestController
-@RequestMapping("/api/keys")
-public class ApiKeyController {
+@RequestMapping("/api/invites")
+public class InviteController {
 
-    private final ApiKeyService apiKeyService;
+    private final InviteService inviteService;
     private final OrganizationRepository organizationRepository;
 
-    public ApiKeyController(ApiKeyService apiKeyService, OrganizationRepository organizationRepository) {
-        this.apiKeyService = apiKeyService;
+    public InviteController(InviteService inviteService, OrganizationRepository organizationRepository) {
+        this.inviteService = inviteService;
         this.organizationRepository = organizationRepository;
     }
 
-    @PostMapping("/generate")
+    @PostMapping
     @PreAuthorize("hasAuthority('ADMIN')")
-    public ResponseEntity<Map<String, String>> generateKey() {
+    public ResponseEntity<InviteResponse> createInvite() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Long orgId = AuthUtils.requireOrganizationId(authentication);
 
-        Optional<Organization> organizationOpt = organizationRepository.findById(orgId);
-        if (organizationOpt.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found");
-        }
+        Organization organization = organizationRepository.findById(orgId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
 
-        String rawKey = apiKeyService.generateKey(organizationOpt.get());
-        
-        return ResponseEntity.ok(Map.of("apiKey", rawKey));
+        InviteToken invite = inviteService.createInvite(organization);
+
+        return ResponseEntity.ok(new InviteResponse(invite.getCode(), invite.getExpiresAt().toInstant().toString()));
     }
 }

@@ -91,6 +91,10 @@ By default, the application connects to:
 * **RabbitMQ** at `localhost:5672` (using default credentials)
 * **Elasticsearch** at `localhost:9200` (non-authenticated / local dev node)
 
+Set a `JWT_SECRET` environment variable to a strong random value in every environment beyond
+local dev — it's used as a raw UTF-8 key for HS256 signing and must be at least 32 bytes long.
+The app will refuse to start otherwise. Generate one with `openssl rand -hex 32`.
+
 ### 3. Run the Application
 Compile the codebase and launch the Spring Boot service:
 ```bash

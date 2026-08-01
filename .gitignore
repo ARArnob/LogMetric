@@ -31,3 +31,15 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### JVM crash dumps ###
+hs_err_pid*.log
+replay_pid*.log
+
+### Scratch ###
+cp.txt
+log.json
+Dump.java
+
+### Local-only planning docs ###
+PLAN.md
