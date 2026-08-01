@@ -1,168 +1,155 @@
+"use client";
+
+import { useState, FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Activity, Github, CheckCircle } from "lucide-react";
+import { AlertCircle, ArrowRight, Loader2 } from "lucide-react";
+import AuthLayout from "../components/AuthLayout";
+import { register as registerApi } from "../lib/api";
+import { useAuth } from "../lib/auth";
 
 export default function SignUp() {
-  return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-6 py-16"
-      style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}
-    >
-      {/* Background grid */}
-      <div
-        className="fixed inset-0 pointer-events-none opacity-10"
-        style={{
-          backgroundImage: `
-            linear-gradient(rgba(0,212,255,0.08) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0,212,255,0.08) 1px, transparent 1px)
-          `,
-          backgroundSize: "60px 60px",
-        }}
-      />
+  const router = useRouter();
+  const { login } = useAuth();
 
-      <div className="relative w-full max-w-sm">
-        {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
+  const [organizationName, setOrganizationName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await registerApi(email, password, organizationName);
+      login(result.token, {
+        email: result.email,
+        role: result.role,
+        organizationId: result.organizationId,
+      });
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign up failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AuthLayout
+      title="Create account"
+      subtitle="Start monitoring in under two minutes"
+      perks={["No credit card", "Instant setup", "Free while in beta"]}
+      footer={
+        <>
+          Already have an account?{" "}
+          <Link href="/signin" className="font-semibold" style={{ color: "var(--accent)" }}>
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        {error && (
           <div
-            className="relative w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+            className="rounded-lg px-3 py-2.5 text-sm flex items-start gap-2"
+            role="alert"
             style={{
-              background: "var(--accent-cyan-dim)",
-              border: "1px solid var(--accent-cyan)",
+              background: "var(--sev-error-dim)",
+              color: "var(--sev-error)",
+              border: "1px solid var(--sev-error)",
             }}
           >
-            <Activity className="w-6 h-6" style={{ color: "var(--accent-cyan)" }} />
-            <span
-              className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full pulse-live"
-              style={{ background: "var(--accent-green)" }}
-            />
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{error}</span>
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-center">
-            Log<span style={{ color: "var(--accent-cyan)" }}>Metric</span>
-          </h1>
-          <p className="text-sm mt-2 text-center" style={{ color: "var(--text-muted)" }}>
-            Start monitoring in under 2 minutes
+        )}
+
+        <div>
+          <label
+            className="block text-[11px] font-bold uppercase tracking-wider mb-1.5"
+            style={{ color: "var(--text-secondary)" }}
+            htmlFor="organizationName"
+          >
+            Organization name
+          </label>
+          <input
+            id="organizationName"
+            type="text"
+            placeholder="Acme Inc."
+            autoComplete="organization"
+            required
+            autoFocus
+            value={organizationName}
+            onChange={(e) => setOrganizationName(e.target.value)}
+          />
+          <p className="text-[11px] mt-1.5 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+            You&apos;ll be the admin of this workspace. Joining an existing team? Ask an admin for
+            an invite instead — org names can&apos;t be claimed twice.
           </p>
         </div>
 
-        {/* Perks */}
-        <div className="flex items-center justify-center gap-4 mb-6">
-          {["Free 14-day trial", "No credit card", "Instant setup"].map((perk) => (
-            <div key={perk} className="flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              <CheckCircle className="w-3 h-3" style={{ color: "var(--accent-green)" }} />
-              {perk}
-            </div>
-          ))}
-        </div>
-
-        {/* Card */}
-        <div
-          className="rounded-2xl p-8"
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border-default)",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-          }}
-        >
-          <div className="space-y-5">
-            <div>
-              <label
-                className="block text-xs font-semibold uppercase tracking-widest mb-2"
-                style={{ color: "var(--text-muted)" }}
-                htmlFor="name"
-              >
-                Full Name
-              </label>
-              <input
-                id="name"
-                type="text"
-                placeholder="Alex Rahman"
-                autoComplete="name"
-              />
-            </div>
-
-            <div>
-              <label
-                className="block text-xs font-semibold uppercase tracking-widest mb-2"
-                style={{ color: "var(--text-muted)" }}
-                htmlFor="email"
-              >
-                Work Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                placeholder="alex@company.com"
-                autoComplete="email"
-              />
-            </div>
-
-            <div>
-              <label
-                className="block text-xs font-semibold uppercase tracking-widest mb-2"
-                style={{ color: "var(--text-muted)" }}
-                htmlFor="password"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                placeholder="8+ characters"
-                autoComplete="new-password"
-              />
-              <p className="text-xs mt-1.5" style={{ color: "var(--text-muted)" }}>
-                At least 8 characters with a number or symbol.
-              </p>
-            </div>
-
-            {/* Sign up → goes to dashboard for demo */}
-            <Link
-              href="/dashboard"
-              className="block w-full py-3 text-center text-sm font-bold rounded-lg transition-all mt-2"
-              style={{ background: "var(--accent-cyan)", color: "#0a0e17" }}
-            >
-              Create Account
-            </Link>
-
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-px" style={{ background: "var(--border-subtle)" }} />
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                or
-              </span>
-              <div className="flex-1 h-px" style={{ background: "var(--border-subtle)" }} />
-            </div>
-
-            <button
-              className="w-full flex items-center justify-center gap-2.5 py-2.5 rounded-lg text-sm font-semibold transition-all"
-              style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-default)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              <Github className="w-4 h-4" />
-              Continue with GitHub
-            </button>
-
-            <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
-              By signing up you agree to our{" "}
-              <a href="#" style={{ color: "var(--accent-cyan)" }}>Terms</a>{" "}
-              and{" "}
-              <a href="#" style={{ color: "var(--accent-cyan)" }}>Privacy Policy</a>.
-            </p>
-          </div>
-        </div>
-
-        <p className="text-center text-sm mt-6" style={{ color: "var(--text-muted)" }}>
-          Already have an account?{" "}
-          <Link
-            href="/signin"
-            className="font-semibold transition-colors"
-            style={{ color: "var(--accent-cyan)" }}
+        <div>
+          <label
+            className="block text-[11px] font-bold uppercase tracking-wider mb-1.5"
+            style={{ color: "var(--text-secondary)" }}
+            htmlFor="email"
           >
-            Sign in
-          </Link>
+            Work email
+          </label>
+          <input
+            id="email"
+            type="email"
+            placeholder="you@company.com"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label
+            className="block text-[11px] font-bold uppercase tracking-wider mb-1.5"
+            style={{ color: "var(--text-secondary)" }}
+            htmlFor="password"
+          >
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+
+        <button type="submit" disabled={submitting} className="btn btn-primary w-full" style={{ padding: "11px 18px" }}>
+          {submitting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Creating account…
+            </>
+          ) : (
+            <>
+              Create account
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
+        </button>
+
+        <p className="text-[11px] text-center leading-relaxed" style={{ color: "var(--text-muted)" }}>
+          By signing up you agree to our{" "}
+          <a href="#" style={{ color: "var(--accent)" }}>Terms</a> and{" "}
+          <a href="#" style={{ color: "var(--accent)" }}>Privacy Policy</a>.
         </p>
-      </div>
-    </div>
+      </form>
+    </AuthLayout>
   );
 }

@@ -1,17 +1,349 @@
+// ===== Types =====
+
 export interface LogEntry {
   id: string;
-  timestamp: number;
+  timestamp: string; // ISO-8601 -- backend serializes Instant this way
   level: string;
   serviceName: string;
+  systemId?: string | null;
   message: string;
   userId?: string;
   patternHash?: string;
+  organizationId?: string;
 }
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+export interface LogSearchRequest {
+  keyword?: string;
+  levels?: string[];
+  serviceNames?: string[];
+  startDate?: number;
+  endDate?: number;
+  page?: number;
+  size?: number;
+  systemId?: string;
+  patternHash?: string;
+}
 
-// Mock data for demo mode when backend is unavailable
+export interface HistogramBucket {
+  timestamp: number;
+  count: number;
+  levels: Record<string, number>;
+}
+
+export interface SeverityBucket {
+  level: string;
+  count: number;
+}
+
+export interface ServiceBucket {
+  name: string;
+  count: number;
+}
+
+export interface PatternCluster {
+  patternHash: string;
+  count: number;
+  levels: Record<string, number>;
+  sampleMessage?: string;
+  sampleService?: string;
+  serviceCount?: number;
+  dominantService?: string;
+}
+
+export interface LogSearchResponse {
+  logs: LogEntry[];
+  total: number;
+  histogram: HistogramBucket[];
+  severityDistribution: SeverityBucket[];
+  serviceNames: ServiceBucket[];
+  patternClusters: PatternCluster[];
+}
+
+// The backend returns aggregation buckets as Map<String,Object>, so numbers
+// and missing fields aren't guaranteed to arrive as the types above imply.
+// Coerce once here, at the boundary, so every consumer downstream can trust
+// the real interfaces instead of re-guarding at every call site.
+function normalizeSearchResponse(raw: unknown): LogSearchResponse {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+  return {
+    logs: asArray(r.logs) as LogEntry[],
+    total: Number(r.total ?? 0),
+    histogram: asArray(r.histogram).map((b) => {
+      const bucket = (b ?? {}) as Record<string, unknown>;
+      const levels = (bucket.levels ?? {}) as Record<string, unknown>;
+      return {
+        timestamp: Number(bucket.timestamp ?? 0),
+        count: Number(bucket.count ?? 0),
+        levels: Object.fromEntries(Object.entries(levels).map(([k, v]) => [k, Number(v)])),
+      };
+    }),
+    severityDistribution: asArray(r.severityDistribution).map((b) => {
+      const bucket = (b ?? {}) as Record<string, unknown>;
+      return { level: String(bucket.level ?? ""), count: Number(bucket.count ?? 0) };
+    }),
+    serviceNames: asArray(r.serviceNames).map((b) => {
+      const bucket = (b ?? {}) as Record<string, unknown>;
+      return { name: String(bucket.name ?? ""), count: Number(bucket.count ?? 0) };
+    }),
+    patternClusters: asArray(r.patternClusters).map((b) => {
+      const bucket = (b ?? {}) as Record<string, unknown>;
+      const levels = (bucket.levels ?? {}) as Record<string, unknown>;
+      return {
+        patternHash: String(bucket.patternHash ?? ""),
+        count: Number(bucket.count ?? 0),
+        levels: Object.fromEntries(Object.entries(levels).map(([k, v]) => [k, Number(v)])),
+        sampleMessage: bucket.sampleMessage != null ? String(bucket.sampleMessage) : undefined,
+        sampleService: bucket.sampleService != null ? String(bucket.sampleService) : undefined,
+        serviceCount: bucket.serviceCount != null ? Number(bucket.serviceCount) : undefined,
+        dominantService: bucket.dominantService != null ? String(bucket.dominantService) : undefined,
+      };
+    }),
+  };
+}
+
+export interface AuthUser {
+  email: string;
+  role: string;
+  organizationId: number;
+}
+
+interface StoredAuth {
+  token: string;
+  user: AuthUser;
+}
+
+interface AuthApiResponse {
+  token: string;
+  email: string;
+  role: string;
+  organizationId: number;
+}
+
+// ===== Config =====
+
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081/api";
+
+/**
+ * Public marketing/demo view: fabricated data, no backend or login
+ * required. Gated behind an explicit flag so a real deployment never
+ * silently disguises a broken backend as working data.
+ */
+export const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
+// ===== Auth storage =====
+// Single source of truth for the JWT + user, shared between plain API
+// calls here and the React context in app/lib/auth.tsx.
+
+const AUTH_STORAGE_KEY = "logmetric_auth";
+
+export function getStoredAuth(): StoredAuth | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw =
+      localStorage.getItem(AUTH_STORAGE_KEY) ??
+      sessionStorage.getItem(AUTH_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as StoredAuth) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** persistent=true survives browser restarts (localStorage); false clears on tab close (sessionStorage). */
+export function setStoredAuth(auth: StoredAuth, persistent = true): void {
+  const primary = persistent ? localStorage : sessionStorage;
+  const other = persistent ? sessionStorage : localStorage;
+  primary.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
+  other.removeItem(AUTH_STORAGE_KEY);
+}
+
+export function clearStoredAuth(): void {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  sessionStorage.removeItem(AUTH_STORAGE_KEY);
+}
+
+export function getToken(): string | null {
+  return getStoredAuth()?.token ?? null;
+}
+
+// ===== Error handling =====
+
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const message =
+      (body && typeof body === "object" && "message" in body && (body as { message?: string }).message) ||
+      `Request failed with status ${response.status}`;
+    throw new ApiError(response.status, String(message));
+  }
+  return (await response.json()) as T;
+}
+
+// ===== Auth API =====
+
+export async function login(email: string, password: string): Promise<AuthApiResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return parseJsonResponse<AuthApiResponse>(response);
+}
+
+export async function register(
+  email: string,
+  password: string,
+  organizationName: string
+): Promise<AuthApiResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, organizationName }),
+  });
+  return parseJsonResponse<AuthApiResponse>(response);
+}
+
+// ===== Log search (authenticated) =====
+
+export async function searchLogs(
+  request: LogSearchRequest = {},
+  opts: { signal?: AbortSignal } = {}
+): Promise<LogSearchResponse> {
+  const token = getToken();
+  if (!token) {
+    throw new ApiError(401, "Not authenticated");
+  }
+
+  const signal = opts.signal
+    ? AbortSignal.any([AbortSignal.timeout(8000), opts.signal])
+    : AbortSignal.timeout(8000);
+
+  const response = await fetch(`${API_BASE_URL}/logs/search`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(request),
+    signal,
+  });
+
+  if (response.status === 401) {
+    clearStoredAuth();
+  }
+
+  const body = await parseJsonResponse<unknown>(response);
+  return normalizeSearchResponse(body);
+}
+
+// ===== API keys (authenticated, ADMIN only) =====
+
+/**
+ * The raw key is only ever returned by this call -- the server stores it
+ * hashed and cannot show it again. There is no corresponding "list keys"
+ * endpoint yet, so the UI must not pretend one exists.
+ */
+export async function generateApiKey(): Promise<string> {
+  const token = getToken();
+  if (!token) {
+    throw new ApiError(401, "Not authenticated");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/keys/generate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(8000),
+  });
+
+  if (response.status === 401) {
+    clearStoredAuth();
+  }
+
+  const body = await parseJsonResponse<{ apiKey: string }>(response);
+  return body.apiKey;
+}
+
+// ===== Live tail (SSE, authenticated) =====
+
+/**
+ * Native EventSource can't attach an Authorization header, and the
+ * backend's stream endpoint is JWT-authenticated -- so this reads the
+ * response body manually via fetch() instead of using EventSource.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToLogStream(
+  onLog: (log: LogEntry) => void,
+  onError?: (err: unknown) => void
+): () => void {
+  const token = getToken();
+  if (!token) {
+    return () => {};
+  }
+
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/logs/stream`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Stream error: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+
+        for (const rawEvent of events) {
+          let eventName = "message";
+          let data = "";
+          for (const line of rawEvent.split("\n")) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim();
+            if (line.startsWith("data:")) data += line.slice(5).trim();
+          }
+          if (eventName === "log" && data) {
+            try {
+              onLog(JSON.parse(data) as LogEntry);
+            } catch {
+              // ignore a malformed event payload
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as { name?: string })?.name !== "AbortError") {
+        onError?.(err);
+      }
+    }
+  })();
+
+  return () => controller.abort();
+}
+
+// ===== Demo mode data (public marketing/demo view only) =====
+
 const MOCK_SERVICES = [
   "auth-service",
   "api-gateway",
@@ -71,7 +403,7 @@ function fillTemplate(template: string): string {
     .replace("{n}", String(Math.floor(Math.random() * 5) + 1));
 }
 
-function generateMockLog(): LogEntry {
+export function generateMockLog(): LogEntry {
   const levels = ["INFO", "INFO", "INFO", "WARN", "ERROR", "DEBUG"];
   const level = randomFrom(levels);
   const templates = MOCK_MESSAGES[level] || MOCK_MESSAGES.INFO;
@@ -79,7 +411,7 @@ function generateMockLog(): LogEntry {
 
   return {
     id: `mock-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    timestamp: Date.now(),
+    timestamp: new Date().toISOString(),
     level,
     serviceName: randomFrom(MOCK_SERVICES),
     message: fillTemplate(template),
@@ -87,39 +419,13 @@ function generateMockLog(): LogEntry {
   };
 }
 
-function generateMockLogs(count = 20): LogEntry[] {
+export function fetchDemoLogs(count = 25): LogEntry[] {
   const logs: LogEntry[] = [];
   const now = Date.now();
   for (let i = count; i > 0; i--) {
     const log = generateMockLog();
-    log.timestamp = now - i * 250 - Math.floor(Math.random() * 100);
+    log.timestamp = new Date(now - i * 250 - Math.floor(Math.random() * 100)).toISOString();
     logs.push(log);
   }
-  return logs.sort((a, b) => b.timestamp - a.timestamp);
+  return logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
-
-export async function fetchLogs(level?: string): Promise<LogEntry[]> {
-  try {
-    const url = level
-      ? `${API_BASE_URL}/logs?level=${level}`
-      : `${API_BASE_URL}/logs`;
-
-    const response = await fetch(url, {
-      cache: "no-store",
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(4000),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Error fetching logs: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data as LogEntry[];
-  } catch {
-    // Fall back to mock data when backend is unreachable (demo mode)
-    return generateMockLogs(25);
-  }
-}
-
-export { generateMockLog };
