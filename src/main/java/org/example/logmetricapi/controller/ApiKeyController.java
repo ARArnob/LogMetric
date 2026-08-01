@@ -31,14 +31,24 @@ public class ApiKeyController {
     public ResponseEntity<Map<String, String>> generateKey() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         
-        // TODO: This will fail with a 401 Unauthorized until the JwtAuthFilter (Task 2.2) is implemented.
-        // Extract organizationId from authentication principal once JwtAuthFilter is implemented.
+        Long orgId = null;
         
-        // For immediate testing of key generation, using a temporary hardcoded fallback:
-        Long orgId = 1L; 
-        
-        if (authentication != null && authentication.getPrincipal() instanceof Long) {
-            orgId = (Long) authentication.getPrincipal();
+        if (authentication != null) {
+            Object principal = authentication.getPrincipal();
+            if (principal instanceof org.example.logmetricapi.model.User) {
+                org.example.logmetricapi.model.User user = (org.example.logmetricapi.model.User) principal;
+                if (user.getOrganization() != null) {
+                    orgId = user.getOrganization().getId();
+                }
+            } else if (principal instanceof Organization) {
+                orgId = ((Organization) principal).getId();
+            } else if (principal instanceof Long) {
+                orgId = (Long) principal;
+            }
+        }
+
+        if (orgId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized to generate API Key");
         }
 
         Optional<Organization> organizationOpt = organizationRepository.findById(orgId);

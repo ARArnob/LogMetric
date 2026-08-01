@@ -6,7 +6,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
+
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
@@ -56,12 +56,20 @@ public class LogController {
     public ResponseEntity<org.example.logmetricapi.dto.LogSearchResponse> searchLogsApi(@RequestBody org.example.logmetricapi.dto.LogSearchRequest request) {
         org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         
-        // TODO: Extract organizationId dynamically from authentication.getName() or principal.
-        // This relies on the upcoming JWT filter chain to populate the SecurityContext.
-        String orgId = "tenant-1"; // Temporary hardcoded fallback for testing
+        String orgId = "tenant-1"; // Temporary fallback
         
-        if (authentication != null && authentication.getName() != null && !authentication.getName().equals("anonymousUser")) {
-            orgId = authentication.getName();
+        if (authentication != null) {
+            Object principal = authentication.getPrincipal();
+            if (principal instanceof org.example.logmetricapi.model.User) {
+                org.example.logmetricapi.model.User user = (org.example.logmetricapi.model.User) principal;
+                if (user.getOrganization() != null) {
+                    orgId = String.valueOf(user.getOrganization().getId());
+                }
+            } else if (principal instanceof org.example.logmetricapi.model.Organization) {
+                orgId = String.valueOf(((org.example.logmetricapi.model.Organization) principal).getId());
+            } else if (authentication.getName() != null && !authentication.getName().equals("anonymousUser")) {
+                orgId = authentication.getName();
+            }
         }
         
         org.example.logmetricapi.dto.LogSearchResponse response = logSearchService.searchLogs(request, orgId);
@@ -102,7 +110,7 @@ public class LogController {
         SearchHits<LogEntry> searchHits = elasticsearchOperations.search(query, LogEntry.class);
 
         List<LogEntry> logs = searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
+                .map(hit -> hit.getContent())
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(logs);

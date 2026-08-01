@@ -19,7 +19,16 @@ public class Organization {
 
     private Timestamp createdAt;
 
-    // TODO: Mapping to User entity (One-to-many relationship) to be added by another developer.
+    @jakarta.persistence.OneToMany(mappedBy = "organization", fetch = jakarta.persistence.FetchType.LAZY, cascade = jakarta.persistence.CascadeType.ALL)
+    private java.util.List<User> users;
+
+    public java.util.List<User> getUsers() {
+        return users;
+    }
+
+    public void setUsers(java.util.List<User> users) {
+        this.users = users;
+    }
 
     public Long getId() {
         return id;

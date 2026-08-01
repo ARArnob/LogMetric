@@ -1,5 +1,6 @@
 package org.example.logmetricapi.config;
 
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.example.logmetricapi.security.ApiKeyAuthFilter;
 import org.example.logmetricapi.service.ApiKeyService;
 import org.springframework.context.annotation.Bean;
@@ -8,7 +9,9 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -24,9 +27,16 @@ import java.util.List;
 public class SecurityConfig {
 
     private final ApiKeyService apiKeyService;
+    private final org.example.logmetricapi.security.JwtAuthFilter jwtAuthFilter;
 
-    public SecurityConfig(ApiKeyService apiKeyService) {
+    public SecurityConfig(ApiKeyService apiKeyService, org.example.logmetricapi.security.JwtAuthFilter jwtAuthFilter) {
         this.apiKeyService = apiKeyService;
+        this.jwtAuthFilter = jwtAuthFilter;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
     }
 
     @Bean
@@ -46,8 +56,7 @@ public class SecurityConfig {
     public SecurityFilterChain apiKeyChain(HttpSecurity http) throws Exception {
         http
             .securityMatchers(matchers -> matchers.requestMatchers(HttpMethod.POST, "/api/logs"))
-            .cors(c -> c.configurationSource(corsConfigurationSource()))
-            .csrf(AbstractHttpConfigurer::disable)
+            .cors(c -> c.configurationSource(corsConfigurationSource())).csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .addFilterBefore(new ApiKeyAuthFilter(apiKeyService), UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
@@ -59,10 +68,9 @@ public class SecurityConfig {
     public SecurityFilterChain jwtChain(HttpSecurity http) throws Exception {
         http
             .securityMatcher("/api/**")
-            .cors(c -> c.configurationSource(corsConfigurationSource()))
-            .csrf(AbstractHttpConfigurer::disable)
+            .cors(c -> c.configurationSource(corsConfigurationSource())).csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            // TODO: JwtAuthFilter to be injected here by another developer
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .anyRequest().authenticated()

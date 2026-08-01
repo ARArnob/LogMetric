@@ -13,7 +13,7 @@ import org.example.logmetricapi.model.LogEntry;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
+
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
 
@@ -92,7 +92,7 @@ public class LogSearchService {
 
         // Map Results
         List<LogEntry> logs = searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
+                .map(hit -> hit.getContent())
                 .collect(Collectors.toList());
 
         LogSearchResponse response = new LogSearchResponse();

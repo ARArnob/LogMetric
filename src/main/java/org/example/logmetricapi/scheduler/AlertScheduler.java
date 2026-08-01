@@ -3,7 +3,7 @@ package org.example.logmetricapi.scheduler;
 import org.example.logmetricapi.model.LogEntry;
 import org.example.logmetricapi.service.LogAnalyticsService;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
+
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
@@ -39,7 +39,7 @@ public class AlertScheduler {
         SearchHits<LogEntry> searchHits = elasticsearchOperations.search(query, LogEntry.class);
         
         List<LogEntry> logs = searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
+                .map(hit -> hit.getContent())
                 .collect(Collectors.toList());
 
         Map<String, Long> serviceCounts = logs.stream()
