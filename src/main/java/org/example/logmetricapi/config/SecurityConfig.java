@@ -1,6 +1,5 @@
 package org.example.logmetricapi.config;
 
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.example.logmetricapi.security.ApiKeyAuthFilter;
 import org.example.logmetricapi.service.ApiKeyService;
 import org.springframework.context.annotation.Bean;
@@ -73,7 +72,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(Arrays.asList("https://*.vercel.app", "http://localhost:3000"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -86,7 +85,7 @@ public class SecurityConfig {
     public SecurityFilterChain apiKeyChain(HttpSecurity http) throws Exception {
         http
             .securityMatchers(matchers -> matchers.requestMatchers(HttpMethod.POST, "/api/logs"))
-            .cors(c -> c.configurationSource(corsConfigurationSource())).csrf(AbstractHttpConfigurer::disable)
+            .cors(c -> c.configurationSource(corsConfigurationSource())).csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .addFilterBefore(new ApiKeyAuthFilter(apiKeyService), UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
@@ -101,7 +100,7 @@ public class SecurityConfig {
     public SecurityFilterChain jwtChain(HttpSecurity http) throws Exception {
         http
             .securityMatcher("/api/**")
-            .cors(c -> c.configurationSource(corsConfigurationSource())).csrf(AbstractHttpConfigurer::disable)
+            .cors(c -> c.configurationSource(corsConfigurationSource())).csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
