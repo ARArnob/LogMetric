@@ -236,7 +236,7 @@ export default function Home() {
                   ))}
                 </div>
                 <div className="flex-1 text-center text-xs font-mono" style={{ color: "var(--text-muted)" }}>
-                  logmetric — live stream — ws://localhost:8080/stream
+                  logmetric — live stream — ws://localhost:8081/stream
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent-green)" }} />

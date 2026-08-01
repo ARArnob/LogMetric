@@ -1,7 +1,41 @@
+"use client";
+
+import { useState, FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Activity, Github } from "lucide-react";
+import { Activity } from "lucide-react";
+import { login as loginApi } from "../lib/api";
+import { useAuth } from "../lib/auth";
 
 export default function SignIn() {
+  const router = useRouter();
+  const { login } = useAuth();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await loginApi(email, password);
+      login(
+        result.token,
+        { email: result.email, role: result.role, organizationId: result.organizationId },
+        remember
+      );
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign in failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center px-6 py-16"
@@ -52,7 +86,20 @@ export default function SignIn() {
             boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
           }}
         >
-          <div className="space-y-5">
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {error && (
+              <div
+                className="rounded-lg px-3 py-2.5 text-sm"
+                style={{
+                  background: "var(--error-dim)",
+                  color: "var(--error)",
+                  border: "1px solid rgba(255,77,106,0.2)",
+                }}
+              >
+                {error}
+              </div>
+            )}
+
             <div>
               <label
                 className="block text-xs font-semibold uppercase tracking-widest mb-2"
@@ -66,6 +113,9 @@ export default function SignIn() {
                 type="email"
                 placeholder="you@company.com"
                 autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
 
@@ -78,19 +128,15 @@ export default function SignIn() {
                 >
                   Password
                 </label>
-                <a
-                  href="#"
-                  className="text-xs transition-colors"
-                  style={{ color: "var(--accent-cyan)" }}
-                >
-                  Forgot password?
-                </a>
               </div>
               <input
                 id="password"
                 type="password"
                 placeholder="••••••••"
                 autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
               />
             </div>
 
@@ -100,6 +146,8 @@ export default function SignIn() {
                 type="checkbox"
                 className="w-3.5 h-3.5 rounded"
                 style={{ accentColor: "var(--accent-cyan)" }}
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
               />
               <label
                 htmlFor="remember"
@@ -110,35 +158,20 @@ export default function SignIn() {
               </label>
             </div>
 
-            {/* Sign in button → goes to dashboard for demo */}
-            <Link
-              href="/dashboard"
-              className="block w-full py-3 text-center text-sm font-bold rounded-lg transition-all mt-2"
-              style={{ background: "var(--accent-cyan)", color: "#0a0e17" }}
-            >
-              Sign In
-            </Link>
-
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-px" style={{ background: "var(--border-subtle)" }} />
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                or
-              </span>
-              <div className="flex-1 h-px" style={{ background: "var(--border-subtle)" }} />
-            </div>
-
             <button
-              className="w-full flex items-center justify-center gap-2.5 py-2.5 rounded-lg text-sm font-semibold transition-all"
+              type="submit"
+              disabled={submitting}
+              className="block w-full py-3 text-center text-sm font-bold rounded-lg transition-all mt-2"
               style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-default)",
-                color: "var(--text-secondary)",
+                background: "var(--accent-cyan)",
+                color: "#0a0e17",
+                opacity: submitting ? 0.7 : 1,
+                cursor: submitting ? "not-allowed" : "pointer",
               }}
             >
-              <Github className="w-4 h-4" />
-              Continue with GitHub
+              {submitting ? "Signing in…" : "Sign In"}
             </button>
-          </div>
+          </form>
         </div>
 
         <p className="text-center text-sm mt-6" style={{ color: "var(--text-muted)" }}>

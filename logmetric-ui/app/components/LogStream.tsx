@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { fetchLogs, generateMockLog, LogEntry } from "../lib/api";
+import { useRouter } from "next/navigation";
+import {
+  ApiError,
+  fetchDemoLogs,
+  generateMockLog,
+  isDemoMode,
+  LogEntry,
+  searchLogs,
+  subscribeToLogStream,
+} from "../lib/api";
+import { useAuth } from "../lib/auth";
 import {
   AlertCircle,
   Info,
@@ -57,12 +67,15 @@ function getLevelConfig(level: string) {
 }
 
 export default function LogStream() {
+  const router = useRouter();
+  const { token } = useAuth();
+  const demoView = isDemoMode && !token;
+
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [filterLevel, setFilterLevel] = useState<string>("ALL");
-  const [isDemo, setIsDemo] = useState(false);
 
   // Counts per level
   const counts = logs.reduce(
@@ -76,43 +89,58 @@ export default function LogStream() {
 
   const loadLogs = useCallback(async () => {
     if (paused) return;
-    try {
-      const data = await fetchLogs(filterLevel !== "ALL" ? filterLevel : undefined);
-      setLogs(data);
-      setError(null);
 
-      // Detect if we're in demo mode by checking if IDs start with 'mock-'
-      if (data.length > 0 && data[0].id.startsWith("mock-")) {
-        setIsDemo(true);
-      } else {
-        setIsDemo(false);
-      }
+    if (demoView) {
+      setLogs(fetchDemoLogs(25));
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await searchLogs({
+        levels: filterLevel !== "ALL" ? [filterLevel] : undefined,
+        size: 100,
+      });
+      setLogs(response.logs);
+      setError(null);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to fetch logs";
-      setError(msg);
+      if (err instanceof ApiError && err.status === 401) {
+        router.replace("/signin");
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Failed to fetch logs");
     } finally {
       setLoading(false);
     }
-  }, [paused, filterLevel]);
+  }, [paused, filterLevel, demoView, router]);
 
-  // Simulate live updates when in demo mode
+  // Demo mode: simulate live updates with generated logs
   useEffect(() => {
-    if (!isDemo || paused) return;
+    if (!demoView || paused) return;
     const interval = setInterval(() => {
-      setLogs((prev) => {
-        const newLog = generateMockLog();
-        return [newLog, ...prev.slice(0, 49)];
-      });
+      setLogs((prev) => [generateMockLog(), ...prev.slice(0, 49)]);
     }, 1200);
     return () => clearInterval(interval);
-  }, [isDemo, paused]);
+  }, [demoView, paused]);
 
+  // Real mode: org-scoped SSE stream for live tail
+  useEffect(() => {
+    if (demoView || paused) return;
+    const unsubscribe = subscribeToLogStream(
+      (log) => setLogs((prev) => [log, ...prev.slice(0, 199)]),
+      (err) => console.error("Log stream error:", err)
+    );
+    return unsubscribe;
+  }, [demoView, paused]);
+
+  // Initial load + periodic full refresh (catches anything the live tail missed)
   useEffect(() => {
     setLoading(true);
     loadLogs();
-    const interval = setInterval(loadLogs, 5000);
+    const interval = setInterval(loadLogs, demoView ? 5000 : 15000);
     return () => clearInterval(interval);
-  }, [loadLogs]);
+  }, [loadLogs, demoView]);
 
   const displayed =
     filterLevel === "ALL"
@@ -151,7 +179,7 @@ export default function LogStream() {
               Live Data Stream
             </span>
           </div>
-          {isDemo && (
+          {demoView && (
             <span
               className="text-[10px] font-bold px-2 py-0.5 rounded-full tracking-widest uppercase"
               style={{
@@ -262,6 +290,17 @@ export default function LogStream() {
         </div>
       </div>
 
+      {/* Error banner -- only in real (non-demo) mode; demo mode never fails visibly */}
+      {error && !demoView && (
+        <div
+          className="px-5 py-3 border-b flex items-center gap-2 text-sm"
+          style={{ background: "var(--error-dim)", borderColor: "var(--border-subtle)", color: "var(--error)" }}
+        >
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-x-auto" style={{ maxHeight: "60vh", overflowY: "auto" }}>
         <table className="w-full text-left text-xs" style={{ borderCollapse: "collapse" }}>
@@ -302,15 +341,17 @@ export default function LogStream() {
               <tr>
                 <td colSpan={5} className="px-6 py-16 text-center">
                   <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                    No logs match the current filter.
+                    {error && !demoView ? "Couldn't load logs." : "No logs match the current filter."}
                   </p>
-                  <button
-                    onClick={() => setFilterLevel("ALL")}
-                    className="mt-3 text-xs underline"
-                    style={{ color: "var(--accent-cyan)" }}
-                  >
-                    Clear filter
-                  </button>
+                  {filterLevel !== "ALL" && (
+                    <button
+                      onClick={() => setFilterLevel("ALL")}
+                      className="mt-3 text-xs underline"
+                      style={{ color: "var(--accent-cyan)" }}
+                    >
+                      Clear filter
+                    </button>
+                  )}
                 </td>
               </tr>
             ) : (

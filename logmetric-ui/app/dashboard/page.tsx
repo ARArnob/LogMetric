@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import LogStream from "../components/LogStream";
 import {
   Activity,
@@ -9,8 +13,38 @@ import {
   Settings,
 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "../lib/auth";
+import { isDemoMode } from "../lib/api";
 
 export default function Dashboard() {
+  const router = useRouter();
+  const { token, user, loading, logout } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !token && !isDemoMode) {
+      router.replace("/signin");
+    }
+  }, [loading, token, router]);
+
+  function handleExit() {
+    logout();
+    router.push("/");
+  }
+
+  if (loading || (!token && !isDemoMode)) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "var(--bg-base)", color: "var(--text-muted)" }}
+      >
+        <div className="flex items-center gap-3 text-sm">
+          <Activity className="w-4 h-4 animate-spin" style={{ color: "var(--accent-cyan)" }} />
+          Loading…
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="min-h-screen flex flex-col"
@@ -71,6 +105,16 @@ export default function Dashboard() {
               style={{ background: "var(--border-default)" }}
             />
 
+            {user && (
+              <span
+                className="hidden md:inline text-xs font-medium"
+                style={{ color: "var(--text-secondary)" }}
+                title={`Signed in as ${user.email} (${user.role})`}
+              >
+                {user.email}
+              </span>
+            )}
+
             <button
               className="flex items-center gap-1.5 p-1.5 rounded-md transition-colors"
               style={{ color: "var(--text-muted)" }}
@@ -79,8 +123,8 @@ export default function Dashboard() {
               <Settings className="w-4 h-4" />
             </button>
 
-            <Link
-              href="/"
+            <button
+              onClick={handleExit}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
               style={{
                 color: "var(--text-secondary)",
@@ -88,8 +132,8 @@ export default function Dashboard() {
               }}
             >
               <LogOut className="w-3.5 h-3.5" />
-              Exit
-            </Link>
+              {token ? "Sign Out" : "Exit"}
+            </button>
           </div>
         </div>
       </header>
@@ -201,7 +245,7 @@ export default function Dashboard() {
           <span>
             Connected to{" "}
             <span style={{ color: "var(--accent-cyan)", fontFamily: "monospace" }}>
-              {process.env.NEXT_PUBLIC_API_URL || "localhost:8080"}
+              {process.env.NEXT_PUBLIC_API_URL || "localhost:8081"}
             </span>
           </span>
         </div>
