@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { generateMockLog, isDemoMode, LogEntry, subscribeToLogStream } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { liveTailPausedStore } from "../lib/liveTail";
 import { SEVERITY_ORDER, severityStyle } from "../lib/severity";
 import {
   AlertCircle,
@@ -47,7 +48,8 @@ export default function LogStream({
   const demoView = isDemoMode && !token;
 
   const [logs, setLogs] = useState<LogEntry[]>(logsProp);
-  const [paused, setPaused] = useState(false);
+  // Shared, not local -- CommandPalette can toggle this from any page.
+  const paused = useSyncExternalStore(liveTailPausedStore.subscribe, liveTailPausedStore.get, () => false);
   const [filterLevel, setFilterLevel] = useState<string>("ALL");
   const [query, setQuery] = useState("");
 
@@ -200,7 +202,7 @@ export default function LogStream({
             </button>
           )}
           <button
-            onClick={() => setPaused((p) => !p)}
+            onClick={() => liveTailPausedStore.set(!paused)}
             className="btn btn-ghost"
             style={{ padding: "6px 10px", fontSize: 12 }}
           >

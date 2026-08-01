@@ -13,10 +13,13 @@ import {
   Users,
   LogOut,
   Menu,
+  Search,
   X,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
+import CommandPalette from "./CommandPalette";
 import { useAuth } from "../lib/auth";
+import { commandPaletteOpenStore } from "../lib/commandPaletteStore";
 
 interface NavItem {
   href: string;
@@ -198,7 +201,24 @@ export default function AppShell({
             </div>
           </div>
 
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => commandPaletteOpenStore.set(true)}
+              className="btn btn-quiet"
+              style={{ padding: "6px 10px", fontSize: 12 }}
+              aria-label="Open command palette"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Search</span>
+              <kbd
+                className="hidden sm:inline text-[10px] font-bold px-1.5 py-0.5 rounded"
+                style={{ background: "var(--bg-inset)", color: "var(--text-muted)" }}
+              >
+                Ctrl K
+              </kbd>
+            </button>
+            <ThemeToggle />
+          </div>
         </header>
 
         <main className="flex-1 px-5 py-6 md:px-8 md:py-8 w-full">
@@ -219,6 +239,8 @@ export default function AppShell({
           {children}
         </main>
       </div>
+
+      <CommandPalette />
     </div>
   );
 }
