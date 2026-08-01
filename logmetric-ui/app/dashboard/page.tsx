@@ -2,15 +2,17 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Activity, AlertCircle, AlertTriangle, Layers, Server } from "lucide-react";
+import Link from "next/link";
+import { Activity, AlertCircle, AlertTriangle, ArrowRight, GitBranch, Key, Layers, Server } from "lucide-react";
 import AppShell from "../components/AppShell";
 import LogStream from "../components/LogStream";
 import StatTile from "../components/charts/StatTile";
 import SeverityBar from "../components/charts/SeverityBar";
 import VolumeHistogram from "../components/charts/VolumeHistogram";
+import CopyButton from "../components/ui/CopyButton";
 import TimeRangePicker, { TimeRangeValue, presetRange } from "../components/TimeRangePicker";
 import { useAuth } from "../lib/auth";
-import { isDemoMode } from "../lib/api";
+import { API_BASE_URL, isDemoMode } from "../lib/api";
 import { useLogSearch } from "../lib/useLogSearch";
 import { compactNumber } from "../lib/severity";
 
@@ -49,6 +51,14 @@ function rangeToParams(range: TimeRangeValue): URLSearchParams {
     }
   }
   return params;
+}
+
+/** Builds an /explorer link that carries the dashboard's current range along with it, so clicking a KPI or a Top Services row lands on the same window you were looking at. */
+function explorerLink(range: TimeRangeValue, extra: Record<string, string> = {}): string {
+  const params = rangeToParams(range);
+  for (const [k, v] of Object.entries(extra)) params.set(k, v);
+  const qs = params.toString();
+  return qs ? `/explorer?${qs}` : "/explorer";
 }
 
 export default function Dashboard() {
@@ -163,92 +173,235 @@ function DashboardContent() {
         </div>
       </div>
 
-      {/* KPI row -- every value computed from the response above */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <div className="animate-fade-up d1">
-          <StatTile
-            label="Events in range"
-            value={compactNumber(stats.total)}
-            sub={stats.services > 0 ? `across ${stats.services} service${stats.services === 1 ? "" : "s"}` : "no services yet"}
-            icon={<Layers className="w-3.5 h-3.5" />}
-            spark={stats.spark}
-            loading={loading}
-          />
-        </div>
-        <div className="animate-fade-up d2">
-          <StatTile
-            label="Error rate"
-            value={`${stats.errorRate.toFixed(2)}%`}
-            sub={`${compactNumber(stats.errors)} error${stats.errors === 1 ? "" : "s"}`}
-            icon={<AlertCircle className="w-3.5 h-3.5" />}
-            accent="var(--sev-error-text)"
-            accentDim="var(--sev-error-dim)"
-            loading={loading}
-          />
-        </div>
-        <div className="animate-fade-up d3">
-          <StatTile
-            label="Warnings"
-            value={compactNumber(stats.warns)}
-            sub="in the current window"
-            icon={<AlertTriangle className="w-3.5 h-3.5" />}
-            accent="var(--sev-warn-text)"
-            accentDim="var(--sev-warn-dim)"
-            loading={loading}
-          />
-        </div>
-        <div className="animate-fade-up d4">
-          <StatTile
-            label="Active services"
-            value={String(stats.services)}
-            sub="reporting in this window"
-            icon={<Server className="w-3.5 h-3.5" />}
-            loading={loading}
-          />
-        </div>
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5 items-stretch">
-        <div className="card card-sheen p-5 lg:col-span-2 animate-fade-up d4">
-          <h2 className="text-sm font-bold mb-0.5" style={{ color: "var(--text-primary)" }}>
-            Ingest volume
-          </h2>
-          <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
-            {data.histogramInterval}-bucketed, stacked by severity — drag to zoom into a window
-          </p>
-          {loading ? (
-            <div className="skeleton" style={{ height: 132 }} />
-          ) : (
-            <VolumeHistogram
-              buckets={data.histogram}
-              interval={data.histogramInterval}
-              onBrush={(start, end) => handleRangeChange({ id: "custom", startDate: start, endDate: end })}
-            />
-          )}
-        </div>
-
-        <div className="card card-sheen p-5 animate-fade-up d5 flex flex-col">
-          <h2 className="text-sm font-bold mb-0.5" style={{ color: "var(--text-primary)" }}>
-            Severity mix
-          </h2>
-          <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
-            Share of events by level
-          </p>
-          {loading ? (
-            <div className="skeleton flex-1" style={{ minHeight: 108 }} />
-          ) : (
-            <div className="flex-1 flex flex-col justify-end">
-              <SeverityBar data={data.severityDistribution} />
+      {!loading && !demoView && range.id === "all" && data.total === 0 ? (
+        <FirstRunOnboarding />
+      ) : (
+        <>
+          {/* KPI row -- every value computed from the response above; the first
+              three are entry points into Explorer, not decoration. */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+            <div className="animate-fade-up d1">
+              <Link href={explorerLink(range)} className="block h-full" style={{ textDecoration: "none" }}>
+                <StatTile
+                  label="Events in range"
+                  value={compactNumber(stats.total)}
+                  sub={stats.services > 0 ? `across ${stats.services} service${stats.services === 1 ? "" : "s"}` : "no services yet"}
+                  icon={<Layers className="w-3.5 h-3.5" />}
+                  spark={stats.spark}
+                  loading={loading}
+                />
+              </Link>
             </div>
-          )}
-        </div>
-      </div>
+            <div className="animate-fade-up d2">
+              <Link href={explorerLink(range, { levels: "ERROR" })} className="block h-full" style={{ textDecoration: "none" }}>
+                <StatTile
+                  label="Error rate"
+                  value={`${stats.errorRate.toFixed(2)}%`}
+                  sub={`${compactNumber(stats.errors)} error${stats.errors === 1 ? "" : "s"}`}
+                  icon={<AlertCircle className="w-3.5 h-3.5" />}
+                  accent="var(--sev-error-text)"
+                  accentDim="var(--sev-error-dim)"
+                  loading={loading}
+                />
+              </Link>
+            </div>
+            <div className="animate-fade-up d3">
+              <Link href={explorerLink(range, { levels: "WARN" })} className="block h-full" style={{ textDecoration: "none" }}>
+                <StatTile
+                  label="Warnings"
+                  value={compactNumber(stats.warns)}
+                  sub="in the current window"
+                  icon={<AlertTriangle className="w-3.5 h-3.5" />}
+                  accent="var(--sev-warn-text)"
+                  accentDim="var(--sev-warn-dim)"
+                  loading={loading}
+                />
+              </Link>
+            </div>
+            <div className="animate-fade-up d4">
+              <StatTile
+                label="Active services"
+                value={String(stats.services)}
+                sub="reporting in this window"
+                icon={<Server className="w-3.5 h-3.5" />}
+                loading={loading}
+              />
+            </div>
+          </div>
 
-      {/* Stream */}
-      <div className="animate-fade-up d6">
-        <LogStream logs={data.logs} loading={loading} error={error} onRefresh={refresh} />
-      </div>
+          {/* Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5 items-stretch">
+            <div className="card card-sheen p-5 lg:col-span-2 animate-fade-up d4">
+              <h2 className="text-sm font-bold mb-0.5" style={{ color: "var(--text-primary)" }}>
+                Ingest volume
+              </h2>
+              <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
+                {data.histogramInterval}-bucketed, stacked by severity — drag to zoom into a window
+              </p>
+              {loading ? (
+                <div className="skeleton" style={{ height: 132 }} />
+              ) : (
+                <VolumeHistogram
+                  buckets={data.histogram}
+                  interval={data.histogramInterval}
+                  onBrush={(start, end) => handleRangeChange({ id: "custom", startDate: start, endDate: end })}
+                />
+              )}
+            </div>
+
+            <div className="card card-sheen p-5 animate-fade-up d5 flex flex-col">
+              <h2 className="text-sm font-bold mb-0.5" style={{ color: "var(--text-primary)" }}>
+                Severity mix
+              </h2>
+              <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
+                Share of events by level
+              </p>
+              {loading ? (
+                <div className="skeleton flex-1" style={{ minHeight: 108 }} />
+              ) : (
+                <div className="flex-1 flex flex-col justify-end">
+                  <SeverityBar data={data.severityDistribution} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Top services / Top patterns -- both entry points, not decoration */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+            <div className="card card-sheen p-5 animate-fade-up d5">
+              <h2 className="text-sm font-bold mb-3" style={{ color: "var(--text-primary)" }}>
+                Top services
+              </h2>
+              {loading ? (
+                <div className="skeleton" style={{ height: 140 }} />
+              ) : data.serviceNames.length === 0 ? (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>No services reporting in this window.</p>
+              ) : (
+                <TopList
+                  items={[...data.serviceNames].sort((a, b) => b.count - a.count).slice(0, 5).map((s) => ({
+                    key: s.name,
+                    label: s.name,
+                    count: s.count,
+                    href: explorerLink(range, { services: s.name }),
+                  }))}
+                  max={data.serviceNames[0] ? Math.max(...data.serviceNames.map((s) => s.count)) : 1}
+                />
+              )}
+            </div>
+
+            <div className="card card-sheen p-5 animate-fade-up d6">
+              <h2 className="text-sm font-bold mb-3" style={{ color: "var(--text-primary)" }}>
+                Top patterns
+              </h2>
+              {loading ? (
+                <div className="skeleton" style={{ height: 140 }} />
+              ) : data.patternClusters.length === 0 ? (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>No pattern clusters in this window.</p>
+              ) : (
+                <TopList
+                  items={[...data.patternClusters]
+                    .sort((a, b) => b.count - a.count)
+                    .slice(0, 5)
+                    .map((p) => ({
+                      key: p.patternHash,
+                      label: p.sampleMessage || p.patternHash.slice(0, 12),
+                      count: p.count,
+                      href: `/patterns?hash=${encodeURIComponent(p.patternHash)}`,
+                      icon: <GitBranch className="w-3 h-3 shrink-0" style={{ color: "var(--text-muted)" }} />,
+                    }))}
+                  max={data.patternClusters[0] ? Math.max(...data.patternClusters.map((p) => p.count)) : 1}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Stream */}
+          <div className="animate-fade-up d6">
+            <LogStream logs={data.logs} loading={loading} error={error} onRefresh={refresh} />
+          </div>
+        </>
+      )}
     </AppShell>
+  );
+}
+
+/** Horizontal-bar top-N list shared by the Top services and Top patterns cards -- each row is a link into the filtered view it represents. */
+function TopList({
+  items,
+  max,
+}: {
+  items: { key: string; label: string; count: number; href: string; icon?: React.ReactNode }[];
+  max: number;
+}) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      {items.map((item) => (
+        <Link
+          key={item.key}
+          href={item.href}
+          className="group flex items-center gap-2.5"
+          style={{ textDecoration: "none" }}
+        >
+          {item.icon}
+          <span
+            className="text-xs font-medium truncate shrink-0"
+            style={{ color: "var(--text-secondary)", width: item.icon ? "auto" : 120, maxWidth: item.icon ? 220 : undefined }}
+            title={item.label}
+          >
+            {item.label}
+          </span>
+          <div className="flex-1 rounded-full overflow-hidden" style={{ height: 6, background: "var(--bg-inset)" }}>
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: `${Math.max((item.count / max) * 100, 4)}%`, background: "var(--accent)" }}
+            />
+          </div>
+          <span
+            className="text-xs font-bold tabular-nums shrink-0 group-hover:underline"
+            style={{ color: "var(--text-primary)" }}
+          >
+            {compactNumber(item.count)}
+          </span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function FirstRunOnboarding() {
+  const ingestOrigin = API_BASE_URL.replace(/\/api\/?$/, "");
+  const snippet = `curl -X POST ${ingestOrigin}/api/logs \\\n  -H "X-API-KEY: <your-api-key>" \\\n  -H "Content-Type: application/json" \\\n  -d '{"level":"INFO","serviceName":"my-service","message":"Hello from LogMetric"}'`;
+
+  return (
+    <div className="card p-8 flex flex-col items-center text-center gap-4 animate-fade-up" style={{ maxWidth: 640, margin: "0 auto" }}>
+      <div
+        className="w-12 h-12 rounded-xl flex items-center justify-center"
+        style={{ background: "var(--accent-dim)", color: "var(--accent)" }}
+      >
+        <Key className="w-6 h-6" />
+      </div>
+      <div>
+        <h2 className="text-lg font-bold mb-1" style={{ color: "var(--text-primary)" }}>
+          No logs yet -- let&apos;s fix that
+        </h2>
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          This organization hasn&apos;t received a single event. Generate an API key and send your first
+          log to see this dashboard come alive.
+        </p>
+      </div>
+      <pre
+        className="text-xs font-mono p-3 rounded-lg overflow-x-auto whitespace-pre text-left w-full"
+        style={{ background: "var(--bg-inset)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
+      >
+        {snippet}
+      </pre>
+      <div className="flex items-center gap-2">
+        <CopyButton value={snippet} label="Copy command" />
+        <Link href="/settings" className="btn btn-primary">
+          Generate an API key
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+    </div>
   );
 }
