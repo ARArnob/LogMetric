@@ -34,6 +34,14 @@ const FEATURES = [
   { Icon: Lock, title: "Multi-tenant by design", desc: "Every read path is scoped to your organization, enforced server-side. API keys are hashed; roles gate every mutation.", tag: "Security" },
 ];
 
+// Every entry must anchor to a section that actually exists on this page --
+// a nav link that scrolls nowhere is worse than a shorter nav.
+const NAV_LINKS = [
+  { label: "Features", href: "#features" },
+  { label: "Pipeline", href: "#pipeline" },
+  { label: "Get started", href: "#get-started" },
+];
+
 const PIPELINE = [
   { icon: Server, label: "Producers", sub: "Services · Apps" },
   { icon: Cpu, label: "RabbitMQ", sub: "Async queue" },
@@ -72,14 +80,14 @@ export default function Home() {
           </div>
 
           <nav className="hidden md:flex items-center gap-1 text-sm">
-            {["Features", "Pipeline"].map((item) => (
+            {NAV_LINKS.map(({ label, href }) => (
               <a
-                key={item}
-                href={`#${item.toLowerCase()}`}
+                key={href}
+                href={href}
                 className="px-3 py-1.5 rounded-md transition-colors"
                 style={{ color: "var(--text-secondary)", textDecoration: "none" }}
               >
-                {item}
+                {label}
               </a>
             ))}
           </nav>
@@ -217,7 +225,7 @@ export default function Home() {
         </section>
 
         {/* Features */}
-        <section id="features" className="px-5 pb-24">
+        <section id="features" className="px-5 pb-24" style={{ scrollMarginTop: 80 }}>
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-12">
               <p className="eyebrow mb-3">Core capabilities</p>
@@ -254,7 +262,7 @@ export default function Home() {
         </section>
 
         {/* Pipeline */}
-        <section id="pipeline" className="px-5 pb-24">
+        <section id="pipeline" className="px-5 pb-24" style={{ scrollMarginTop: 80 }}>
           <div className="max-w-5xl mx-auto">
             <div className="text-center mb-12">
               <p className="eyebrow mb-3">How it works</p>
@@ -299,7 +307,7 @@ export default function Home() {
         </section>
 
         {/* CTA */}
-        <section className="px-5 pb-24">
+        <section id="get-started" className="px-5 pb-24" style={{ scrollMarginTop: 80 }}>
           <div className="max-w-4xl mx-auto">
             <div
               className="card card-sheen p-10 md:p-14 text-center relative overflow-hidden"
