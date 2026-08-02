@@ -352,6 +352,14 @@ input::placeholder { color: var(--text-muted); }
 }
 .log-row-enter { animation: slideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
+@keyframes pipelineFlow {
+  0% { left: -2px; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+.pipeline-flow-dot { position: absolute; left: -2px; animation: pipelineFlow 1.8s ease-in-out infinite; }
+
 .log-row { cursor: pointer; }
 .log-row:hover, .log-row:focus-within { background: var(--bg-elevated); }
 .log-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }

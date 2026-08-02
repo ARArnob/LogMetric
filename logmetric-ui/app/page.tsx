@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -15,15 +16,60 @@ import {
   Waves,
 } from "lucide-react";
 import ThemeToggle from "./components/ThemeToggle";
+import { useTheme, THEMES, THEME_META } from "./lib/theme";
 
-// Badge text uses the -text tokens so the level stays legible on the light theme.
-const TERMINAL_ROWS = [
+// Badge text uses the -text tokens so the level stays legible on the light
+// theme. This pool is cycled by TerminalWindow (F16) rather than rendered
+// once and left static -- a wider pool than the visible window (5 rows)
+// means the loop doesn't read as an obvious immediate repeat.
+const TERMINAL_ROW_POOL = [
   { ts: "10:42:31.012", level: "INFO", svc: "auth-service", hash: "3a7f92b1", msg: "User login successful uid=u_8812 ip=192.168.1.45", c: "var(--sev-info-text)", b: "var(--sev-info-dim)" },
   { ts: "10:42:31.088", level: "WARN", svc: "rate-limiter", hash: "e9c4d723", msg: "Rate limit threshold 85% — uid=u_8812", c: "var(--sev-warn-text)", b: "var(--sev-warn-dim)" },
   { ts: "10:42:31.204", level: "ERROR", svc: "ingest-worker", hash: "b2f41a09", msg: "Upstream timeout after 5000ms — retrying batch_id=b_0041", c: "var(--sev-error-text)", b: "var(--sev-error-dim)" },
   { ts: "10:42:31.390", level: "INFO", svc: "pattern-engine", hash: "3a7f92b1", msg: "Pattern match — cluster_size=142", c: "var(--sev-info-text)", b: "var(--sev-info-dim)" },
   { ts: "10:42:31.512", level: "DEBUG", svc: "rabbitmq-consumer", hash: "7d83c091", msg: "Queue depth 2341 msgs — consumer_lag=12ms", c: "var(--sev-debug-text)", b: "var(--sev-debug-dim)" },
+  { ts: "10:42:32.077", level: "INFO", svc: "payments-svc", hash: "5c11a4e2", msg: "Charge succeeded amount=4200 currency=usd", c: "var(--sev-info-text)", b: "var(--sev-info-dim)" },
+  { ts: "10:42:32.301", level: "WARN", svc: "inventory-svc", hash: "9b02f7d4", msg: "Stock threshold breached sku=SKU-3391 qty=2", c: "var(--sev-warn-text)", b: "var(--sev-warn-dim)" },
+  { ts: "10:42:32.588", level: "INFO", svc: "search-index", hash: "c4a819f0", msg: "Bulk index committed docs=214 took_ms=38", c: "var(--sev-info-text)", b: "var(--sev-info-dim)" },
+  { ts: "10:42:32.812", level: "ERROR", svc: "notification-svc", hash: "1f6d3a88", msg: "SMTP relay refused connection — retry scheduled", c: "var(--sev-error-text)", b: "var(--sev-error-dim)" },
+  { ts: "10:42:33.045", level: "DEBUG", svc: "auth-service", hash: "e0b12c73", msg: "Token cache hit uid=u_2210 ttl_s=298", c: "var(--sev-debug-text)", b: "var(--sev-debug-dim)" },
+  { ts: "10:42:33.290", level: "INFO", svc: "pattern-engine", hash: "b2f41a09", msg: "Cluster size grew to 143 — anomaly score 0.12", c: "var(--sev-info-text)", b: "var(--sev-info-dim)" },
+  { ts: "10:42:33.510", level: "WARN", svc: "rate-limiter", hash: "e9c4d723", msg: "Rate limit threshold 91% — uid=u_8812", c: "var(--sev-warn-text)", b: "var(--sev-warn-dim)" },
 ];
+
+const TERMINAL_WINDOW_SIZE = 5;
+const TERMINAL_TICK_MS = 2400;
+
+/**
+ * Cycles a fixed-size window through TERMINAL_ROW_POOL, looping forever.
+ * Each tick drops the oldest visible row and appends the next pool entry
+ * under a fresh `uid` -- React's key-based reconciliation then only mounts
+ * (and thus only animates in) the one genuinely new row; the four that
+ * shift up keep their existing DOM nodes and never replay an entrance.
+ * Skips the interval entirely under reduced-motion rather than just muting
+ * the animation -- the content itself shouldn't keep changing either.
+ */
+function useTerminalRows() {
+  const [rows, setRows] = useState(() =>
+    TERMINAL_ROW_POOL.slice(0, TERMINAL_WINDOW_SIZE).map((r, i) => ({ ...r, uid: i }))
+  );
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let poolIndex = TERMINAL_WINDOW_SIZE % TERMINAL_ROW_POOL.length;
+    let nextUid = TERMINAL_WINDOW_SIZE;
+    const id = setInterval(() => {
+      const next = { ...TERMINAL_ROW_POOL[poolIndex], uid: nextUid };
+      poolIndex = (poolIndex + 1) % TERMINAL_ROW_POOL.length;
+      nextUid += 1;
+      setRows((prev) => [...prev.slice(1), next]);
+    }, TERMINAL_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  return rows;
+}
 
 const FEATURES = [
   { Icon: Zap, title: "Async message bus", desc: "RabbitMQ-backed ingestion decouples producers from consumers, so a traffic spike queues instead of dropping.", tag: "RabbitMQ" },
@@ -57,6 +103,9 @@ const PIPELINE = [
 ];
 
 export default function Home() {
+  const { theme, setTheme } = useTheme();
+  const terminalRows = useTerminalRows();
+
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
       {/* Nav */}
@@ -189,7 +238,7 @@ export default function Home() {
               your organization.
             </p>
 
-            <div className="animate-fade-up d3 flex flex-col sm:flex-row items-center justify-center gap-3 mb-14">
+            <div className="animate-fade-up d3 flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
               <Link href="/signup" className="btn btn-primary w-full sm:w-auto" style={{ padding: "12px 24px" }}>
                 Start ingesting logs
                 <ArrowRight className="w-4 h-4" />
@@ -198,6 +247,33 @@ export default function Home() {
                 <Activity className="w-4 h-4" style={{ color: "var(--accent)" }} />
                 Sign in to dashboard
               </Link>
+            </div>
+
+            {/* Live theme preview -- lets a visitor feel the product's polish
+                in one click, before ever creating an account. */}
+            <div className="animate-fade-up d3 flex flex-col items-center gap-2 mb-14">
+              <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                Try it live
+              </p>
+              <div className="flex items-center gap-1.5 p-1 rounded-full" style={{ background: "var(--bg-inset)", border: "1px solid var(--border-subtle)" }}>
+                {THEMES.map((t) => {
+                  const active = theme === t;
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setTheme(t)}
+                      className="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors"
+                      style={{
+                        background: active ? "var(--accent)" : "transparent",
+                        color: active ? "var(--accent-contrast)" : "var(--text-secondary)",
+                      }}
+                      aria-pressed={active}
+                    >
+                      {THEME_META[t].label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -223,8 +299,8 @@ export default function Home() {
               </div>
 
               <div className="p-4 font-mono overflow-x-auto" style={{ fontSize: 11.5, lineHeight: 1.9, minHeight: 200 }}>
-                {TERMINAL_ROWS.map((row, i) => (
-                  <div key={i} className="flex items-start gap-3 whitespace-nowrap animate-fade-up" style={{ animationDelay: `${0.4 + i * 0.09}s` }}>
+                {terminalRows.map((row) => (
+                  <div key={row.uid} className="flex items-start gap-3 whitespace-nowrap log-row-enter">
                     <span style={{ color: "var(--text-muted)" }}>{row.ts}</span>
                     <span
                       className="px-1.5 rounded text-center shrink-0"
@@ -315,11 +391,20 @@ export default function Home() {
                         </div>
                       </div>
                       {i < PIPELINE.length - 1 && (
-                        <ArrowRight
-                          className="w-4 h-4 shrink-0 rotate-90 md:rotate-0 mx-auto md:mx-1"
-                          style={{ color: "var(--border-strong)" }}
-                          aria-hidden
-                        />
+                        <div className="relative w-4 h-4 shrink-0 mx-auto md:mx-1 overflow-hidden">
+                          <ArrowRight
+                            className="w-4 h-4 rotate-90 md:rotate-0"
+                            style={{ color: "var(--border-strong)" }}
+                            aria-hidden
+                          />
+                          {/* Subtle "data flowing through the pipeline" cue -- purely
+                              decorative, so it's aria-hidden like the arrow itself. */}
+                          <span
+                            className="absolute top-1/2 -translate-y-1/2 rounded-full pipeline-flow-dot"
+                            style={{ width: 3, height: 3, background: "var(--accent)", animationDelay: `${i * 0.35}s` }}
+                            aria-hidden
+                          />
+                        </div>
                       )}
                     </div>
                   );
