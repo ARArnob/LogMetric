@@ -31,6 +31,10 @@ const LEVEL_ICON: Record<string, React.ReactNode> = {
 
 const SCROLL_TOP_THRESHOLD = 24;
 const FLASH_MS = 1100;
+// The live tail is a rolling window, not an archive -- Explorer is the tool
+// for anything older. Kept as one named constant so the cap logic and the
+// footer's disclosure of it can never drift apart.
+const RETENTION_CAP = 200;
 
 /**
  * Presentational live-tail view. Its `logs` come from the caller (dashboard
@@ -82,7 +86,7 @@ export default function LogStream({
     const flushed = bufferRef.current;
     bufferRef.current = [];
     setBufferedCount(0);
-    setLogs((prev) => [...flushed, ...prev].slice(0, 200));
+    setLogs((prev) => [...flushed, ...prev].slice(0, RETENTION_CAP));
     markFresh(flushed.map((l) => l.id));
   }
 
@@ -99,11 +103,11 @@ export default function LogStream({
 
   function receiveLog(log: LogEntry) {
     if (pausedRef.current || !atTopRef.current) {
-      bufferRef.current = [log, ...bufferRef.current].slice(0, 199);
+      bufferRef.current = [log, ...bufferRef.current].slice(0, RETENTION_CAP - 1);
       setBufferedCount(bufferRef.current.length);
       return;
     }
-    setLogs((prev) => [log, ...prev.slice(0, 199)]);
+    setLogs((prev) => [log, ...prev.slice(0, RETENTION_CAP - 1)]);
     markFresh([log.id]);
   }
 
@@ -486,6 +490,14 @@ export default function LogStream({
             {logs.length}
           </span>{" "}
           events
+          {logs.length >= RETENTION_CAP && (
+            <>
+              {" "}
+              <span title={`The live tail keeps only the newest ${RETENTION_CAP} events -- use Explorer to search further back.`}>
+                · capped at {RETENTION_CAP}
+              </span>
+            </>
+          )}
         </span>
         <span className="font-mono" style={{ fontSize: 10 }}>
           {paused ? (

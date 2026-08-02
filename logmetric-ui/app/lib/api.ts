@@ -404,11 +404,20 @@ export async function createInvite(): Promise<Invite> {
 
 // ===== Live tail (SSE, authenticated) =====
 
+const SSE_RETRY_BASE_MS = 1000;
+const SSE_RETRY_MAX_MS = 15000;
+
 /**
  * Native EventSource can't attach an Authorization header, and the
  * backend's stream endpoint is JWT-authenticated -- so this reads the
  * response body manually via fetch() instead of using EventSource.
- * Returns an unsubscribe function.
+ *
+ * The stream is meant to stay open indefinitely, so any end -- a thrown
+ * error or a clean `done` (proxy idle timeout, backend restart, laptop
+ * sleep/wake losing the TCP connection) -- is treated as a dropped
+ * connection and retried with capped exponential backoff, not a terminal
+ * state. Only an explicit unsubscribe (or an AbortError it causes) stops
+ * retrying. Returns that unsubscribe function.
  */
 export function subscribeToLogStream(
   onLog: (log: LogEntry) => void,
@@ -419,9 +428,12 @@ export function subscribeToLogStream(
     return () => {};
   }
 
-  const controller = new AbortController();
+  let stopped = false;
+  let controller = new AbortController();
+  let retryDelay = SSE_RETRY_BASE_MS;
 
-  (async () => {
+  async function connect() {
+    controller = new AbortController();
     try {
       const response = await apiFetch(`${API_BASE_URL}/logs/stream`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -431,6 +443,9 @@ export function subscribeToLogStream(
       if (!response.ok || !response.body) {
         throw new Error(`Stream error: ${response.status}`);
       }
+
+      // Reached a working connection -- forget any prior backoff.
+      retryDelay = SSE_RETRY_BASE_MS;
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -461,13 +476,24 @@ export function subscribeToLogStream(
         }
       }
     } catch (err) {
-      if ((err as { name?: string })?.name !== "AbortError") {
-        onError?.(err);
+      if ((err as { name?: string })?.name === "AbortError") {
+        return; // intentional unsubscribe -- don't reconnect
       }
+      onError?.(err);
     }
-  })();
 
-  return () => controller.abort();
+    if (stopped) return;
+    await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    retryDelay = Math.min(retryDelay * 2, SSE_RETRY_MAX_MS);
+    if (!stopped) connect();
+  }
+
+  connect();
+
+  return () => {
+    stopped = true;
+    controller.abort();
+  };
 }
 
 // ===== Demo mode data (public marketing/demo view only) =====

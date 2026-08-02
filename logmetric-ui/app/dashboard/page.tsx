@@ -130,6 +130,34 @@ function DashboardContent() {
     };
   }, [data]);
 
+  const topServices = useMemo(
+    () => ({
+      items: [...data.serviceNames]
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+        .map((s) => ({ key: s.name, label: s.name, count: s.count, href: explorerLink(range, { services: s.name }) })),
+      max: data.serviceNames[0] ? Math.max(...data.serviceNames.map((s) => s.count)) : 1,
+    }),
+    [data, range]
+  );
+
+  const topPatterns = useMemo(
+    () => ({
+      items: [...data.patternClusters]
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+        .map((p) => ({
+          key: p.patternHash,
+          label: p.sampleMessage || p.patternHash.slice(0, 12),
+          count: p.count,
+          href: `/patterns?hash=${encodeURIComponent(p.patternHash)}`,
+          icon: <GitBranch className="w-3 h-3 shrink-0" style={{ color: "var(--text-muted)" }} />,
+        })),
+      max: data.patternClusters[0] ? Math.max(...data.patternClusters.map((p) => p.count)) : 1,
+    }),
+    [data, range]
+  );
+
   if (authLoading || (!token && !isDemoMode)) {
     return (
       <div
@@ -277,15 +305,7 @@ function DashboardContent() {
               ) : data.serviceNames.length === 0 ? (
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>No services reporting in this window.</p>
               ) : (
-                <TopList
-                  items={[...data.serviceNames].sort((a, b) => b.count - a.count).slice(0, 5).map((s) => ({
-                    key: s.name,
-                    label: s.name,
-                    count: s.count,
-                    href: explorerLink(range, { services: s.name }),
-                  }))}
-                  max={data.serviceNames[0] ? Math.max(...data.serviceNames.map((s) => s.count)) : 1}
-                />
+                <TopList items={topServices.items} max={topServices.max} />
               )}
             </div>
 
@@ -298,19 +318,7 @@ function DashboardContent() {
               ) : data.patternClusters.length === 0 ? (
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>No pattern clusters in this window.</p>
               ) : (
-                <TopList
-                  items={[...data.patternClusters]
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 5)
-                    .map((p) => ({
-                      key: p.patternHash,
-                      label: p.sampleMessage || p.patternHash.slice(0, 12),
-                      count: p.count,
-                      href: `/patterns?hash=${encodeURIComponent(p.patternHash)}`,
-                      icon: <GitBranch className="w-3 h-3 shrink-0" style={{ color: "var(--text-muted)" }} />,
-                    }))}
-                  max={data.patternClusters[0] ? Math.max(...data.patternClusters.map((p) => p.count)) : 1}
-                />
+                <TopList items={topPatterns.items} max={topPatterns.max} />
               )}
             </div>
           </div>
