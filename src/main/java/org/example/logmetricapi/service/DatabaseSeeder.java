@@ -48,6 +48,9 @@ public class DatabaseSeeder implements CommandLineRunner {
             admin.setPassword(passwordEncoder.encode(seedAdminPassword));
             admin.setRole(Role.ADMIN);
             admin.setOrganization(org);
+            // Seeded for local dev convenience -- skip the OTP round-trip so the
+            // printed credentials below are immediately usable (T37).
+            admin.setEmailVerified(true);
             userRepository.save(admin);
 
             String apiKey = apiKeyService.generateKey(org);

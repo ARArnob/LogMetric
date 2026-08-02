@@ -138,6 +138,12 @@ interface AuthApiResponse {
   organizationId: number;
 }
 
+/** register()/registerWithInvite() no longer hand back a token directly -- both now require confirming an emailed code first (verifyEmail). */
+export interface VerificationPendingResponse {
+  email: string;
+  message: string;
+}
+
 // ===== Config =====
 
 export const API_BASE_URL =
@@ -269,13 +275,13 @@ export async function register(
   email: string,
   password: string,
   organizationName: string
-): Promise<AuthApiResponse> {
+): Promise<VerificationPendingResponse> {
   const response = await apiFetch(`${API_BASE_URL}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, organizationName }),
   });
-  return parseJsonResponse<AuthApiResponse>(response);
+  return parseJsonResponse<VerificationPendingResponse>(response);
 }
 
 /** Joins an existing organization as a USER by redeeming a single-use invite code. */
@@ -283,13 +289,33 @@ export async function registerWithInvite(
   email: string,
   password: string,
   inviteCode: string
-): Promise<AuthApiResponse> {
+): Promise<VerificationPendingResponse> {
   const response = await apiFetch(`${API_BASE_URL}/auth/register-with-invite`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, inviteCode }),
   });
+  return parseJsonResponse<VerificationPendingResponse>(response);
+}
+
+/** Confirms the signup OTP and returns the same token/response shape register() used to return directly, before email verification gated login. */
+export async function verifyEmail(email: string, code: string): Promise<AuthApiResponse> {
+  const response = await apiFetch(`${API_BASE_URL}/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code }),
+  });
   return parseJsonResponse<AuthApiResponse>(response);
+}
+
+/** Always resolves with the same generic message whether or not the address has a pending signup -- the backend deliberately doesn't leak that distinction. */
+export async function resendVerification(email: string): Promise<{ message: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/auth/resend-verification`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return parseJsonResponse<{ message: string }>(response);
 }
 
 /** The caller's own record, read fresh from the DB -- used to detect a role change without waiting for re-login. */

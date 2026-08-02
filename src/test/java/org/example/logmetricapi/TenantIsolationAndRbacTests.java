@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.logmetricapi.model.LogEntry;
 import org.example.logmetricapi.service.SseService;
+import org.example.logmetricapi.support.FakeMailConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -39,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(FakeMailConfig.class)
 class TenantIsolationAndRbacTests {
 
     @Autowired
@@ -162,8 +165,9 @@ class TenantIsolationAndRbacTests {
 
     private RegisteredUser registerNewOrg() throws Exception {
         String suffix = UUID.randomUUID().toString();
+        String email = "t35-admin-" + suffix + "@test.local";
         Map<String, String> body = Map.of(
-                "email", "t35-admin-" + suffix + "@test.local",
+                "email", email,
                 "password", "password123",
                 "organizationName", "T35-Org-" + suffix
         );
@@ -172,8 +176,7 @@ class TenantIsolationAndRbacTests {
                         .content(objectMapper.writeValueAsString(body)))
                 .andReturn();
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
-        JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
-        return new RegisteredUser(json.get("token").asText(), json.get("organizationId").asLong());
+        return verifyEmail(email);
     }
 
     private String createInvite(String adminToken) throws Exception {
@@ -184,12 +187,28 @@ class TenantIsolationAndRbacTests {
     }
 
     private RegisteredUser joinOrgAsUser(String inviteCode) throws Exception {
+        String email = "t35-member-" + UUID.randomUUID() + "@test.local";
         Map<String, String> body = Map.of(
-                "email", "t35-member-" + UUID.randomUUID() + "@test.local",
+                "email", email,
                 "password", "password123",
                 "inviteCode", inviteCode
         );
         MvcResult result = mockMvc.perform(post("/api/auth/register-with-invite")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andReturn();
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        return verifyEmail(email);
+    }
+
+    // T37: register/register-with-invite no longer return a token directly --
+    // both now require confirming the emailed OTP first (see FakeMailConfig).
+    private RegisteredUser verifyEmail(String email) throws Exception {
+        String code = FakeMailConfig.lastCodeSentTo(email);
+        assertThat(code).as("expected a verification code to have been emailed to " + email).isNotNull();
+
+        Map<String, String> body = Map.of("email", email, "code", code);
+        MvcResult result = mockMvc.perform(post("/api/auth/verify-email")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andReturn();

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, ArrowRight, Loader2 } from "lucide-react";
 import AuthLayout from "../components/AuthLayout";
-import { login as loginApi } from "../lib/api";
+import { ApiError, login as loginApi } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
 export default function SignIn() {
@@ -31,6 +31,10 @@ export default function SignIn() {
       );
       router.push("/dashboard");
     } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
       setError(err instanceof Error ? err.message : "Sign in failed");
     } finally {
       setSubmitting(false);

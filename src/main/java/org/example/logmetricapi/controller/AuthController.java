@@ -4,19 +4,27 @@ import jakarta.validation.Valid;
 import org.example.logmetricapi.dto.AuthResponse;
 import org.example.logmetricapi.dto.CurrentUserResponse;
 import org.example.logmetricapi.dto.LoginRequest;
+import org.example.logmetricapi.dto.MessageResponse;
 import org.example.logmetricapi.dto.RegisterRequest;
 import org.example.logmetricapi.dto.RegisterWithInviteRequest;
+import org.example.logmetricapi.dto.ResendVerificationRequest;
+import org.example.logmetricapi.dto.VerificationPendingResponse;
+import org.example.logmetricapi.dto.VerifyEmailRequest;
 import org.example.logmetricapi.model.Organization;
+import org.example.logmetricapi.model.OtpPurpose;
 import org.example.logmetricapi.model.Role;
 import org.example.logmetricapi.model.User;
 import org.example.logmetricapi.repository.OrganizationRepository;
 import org.example.logmetricapi.repository.UserRepository;
 import org.example.logmetricapi.service.InviteService;
 import org.example.logmetricapi.service.JwtService;
+import org.example.logmetricapi.service.MailService;
+import org.example.logmetricapi.service.OtpService;
 import org.example.logmetricapi.util.AuthUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -39,6 +47,8 @@ public class AuthController {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final InviteService inviteService;
+    private final OtpService otpService;
+    private final MailService mailService;
 
     public AuthController(
             UserRepository userRepository,
@@ -46,7 +56,9 @@ public class AuthController {
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             AuthenticationManager authenticationManager,
-            InviteService inviteService
+            InviteService inviteService,
+            OtpService otpService,
+            MailService mailService
     ) {
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
@@ -54,10 +66,12 @@ public class AuthController {
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
         this.inviteService = inviteService;
+        this.otpService = otpService;
+        this.mailService = mailService;
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<VerificationPendingResponse> register(@Valid @RequestBody RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
         }
@@ -82,19 +96,12 @@ public class AuthController {
         user.setOrganization(org);
         userRepository.save(user);
 
-        String jwtToken = jwtService.generateToken(user);
-
-        return ResponseEntity.ok(new AuthResponse(
-                jwtToken,
-                user.getEmail(),
-                user.getRole().name(),
-                org.getId()
-        ));
+        return ResponseEntity.ok(issueVerificationCode(user));
     }
 
     @PostMapping("/register-with-invite")
     @Transactional
-    public ResponseEntity<AuthResponse> registerWithInvite(@Valid @RequestBody RegisterWithInviteRequest request) {
+    public ResponseEntity<VerificationPendingResponse> registerWithInvite(@Valid @RequestBody RegisterWithInviteRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
         }
@@ -110,14 +117,57 @@ public class AuthController {
         user.setOrganization(org);
         userRepository.save(user);
 
-        String jwtToken = jwtService.generateToken(user);
+        return ResponseEntity.ok(issueVerificationCode(user));
+    }
 
+    private VerificationPendingResponse issueVerificationCode(User user) {
+        String code = otpService.issue(user.getEmail(), OtpPurpose.EMAIL_VERIFICATION);
+        mailService.sendVerificationCode(user.getEmail(), code);
+        return new VerificationPendingResponse(user.getEmail(), "Check your email for a verification code");
+    }
+
+    /**
+     * Confirms the signup OTP and returns the same token/response shape
+     * register() used to return directly, before T37 gated login on
+     * verification.
+     */
+    @PostMapping("/verify-email")
+    public ResponseEntity<AuthResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        otpService.verify(request.getEmail(), OtpPurpose.EMAIL_VERIFICATION, request.getCode());
+
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired code"));
+        user.setEmailVerified(true);
+        userRepository.save(user);
+
+        String jwtToken = jwtService.generateToken(user);
         return ResponseEntity.ok(new AuthResponse(
                 jwtToken,
                 user.getEmail(),
                 user.getRole().name(),
-                org.getId()
+                user.getOrganization().getId()
         ));
+    }
+
+    /**
+     * Always returns the same generic body, whether or not the address has a
+     * pending signup -- this endpoint is unauthenticated, so branching on
+     * account state would let it be used to enumerate registered emails.
+     */
+    @PostMapping("/resend-verification")
+    public ResponseEntity<MessageResponse> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        try {
+            userRepository.findByEmail(request.getEmail())
+                    .filter(u -> !u.isEmailVerified())
+                    .ifPresent(u -> {
+                        String code = otpService.issue(u.getEmail(), OtpPurpose.EMAIL_VERIFICATION);
+                        mailService.sendVerificationCode(u.getEmail(), code);
+                    });
+        } catch (ResponseStatusException e) {
+            // Resend cooldown or similar -- swallow it so this endpoint can't
+            // be used to tell a real pending signup apart from a nonexistent one.
+        }
+        return ResponseEntity.ok(new MessageResponse("If that email has a pending verification, a new code has been sent."));
     }
 
     @PostMapping("/login")
@@ -126,6 +176,8 @@ public class AuthController {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
             );
+        } catch (DisabledException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Email not verified");
         } catch (AuthenticationException e) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }

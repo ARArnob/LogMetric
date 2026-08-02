@@ -30,6 +30,10 @@ public class User implements UserDetails {
     @JoinColumn(name = "organization_id")
     private Organization organization;
 
+    // T37: gates login (see isEnabled()) until the signup OTP is confirmed.
+    @Column(nullable = false)
+    private boolean emailVerified = false;
+
     // --- Constructors ---
     public User() {
     }
@@ -58,6 +62,9 @@ public class User implements UserDetails {
     public Organization getOrganization() { return organization; }
     public void setOrganization(Organization organization) { this.organization = organization; }
 
+    public boolean isEmailVerified() { return emailVerified; }
+    public void setEmailVerified(boolean emailVerified) { this.emailVerified = emailVerified; }
+
     // --- UserDetails Methods ---
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
@@ -84,8 +91,11 @@ public class User implements UserDetails {
         return true;
     }
 
+    // T37: DaoAuthenticationProvider checks this before verifying the
+    // password, so an unverified account fails login with a distinct
+    // DisabledException instead of a generic bad-credentials error.
     @Override
     public boolean isEnabled() {
-        return true;
+        return emailVerified;
     }
 }

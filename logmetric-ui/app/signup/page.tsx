@@ -6,7 +6,6 @@ import Link from "next/link";
 import { AlertCircle, ArrowRight, Loader2, UserPlus } from "lucide-react";
 import AuthLayout from "../components/AuthLayout";
 import { ApiError, ValidationError, register as registerApi, registerWithInvite } from "../lib/api";
-import { useAuth } from "../lib/auth";
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
@@ -20,7 +19,6 @@ function FieldError({ message }: { message?: string }) {
 function SignUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login } = useAuth();
 
   const [joinMode, setJoinMode] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
@@ -50,12 +48,7 @@ function SignUpContent() {
       const result = joinMode
         ? await registerWithInvite(email, password, inviteCode)
         : await registerApi(email, password, organizationName);
-      login(result.token, {
-        email: result.email,
-        role: result.role,
-        organizationId: result.organizationId,
-      });
-      router.push("/dashboard");
+      router.push(`/verify-email?email=${encodeURIComponent(result.email)}`);
     } catch (err) {
       if (err instanceof ValidationError) {
         setFieldErrors(err.fields);
