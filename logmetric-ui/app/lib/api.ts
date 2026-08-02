@@ -1,3 +1,6 @@
+import { backendUnreachableStore } from "./backendHealth";
+import { signalSessionExpired } from "./sessionExpiry";
+
 // ===== Types =====
 
 export interface LogEntry {
@@ -147,6 +150,28 @@ export const API_BASE_URL =
  */
 export const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
+/**
+ * Every real request funnels through this instead of calling fetch()
+ * directly, so backend-reachability detection (F17) lives in exactly one
+ * place. fetch() rejects with a TypeError for a genuine network failure
+ * (DNS/connection refused) -- that's the "backend is down" signal. A
+ * cancelled/timed-out request (AbortError) is not a reachability problem
+ * and must not trip the banner. Getting any HTTP response at all, even a
+ * 4xx/5xx, proves the server is reachable and clears it.
+ */
+async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    const response = await fetch(input, init);
+    backendUnreachableStore.set(false);
+    return response;
+  } catch (err) {
+    if (err instanceof TypeError) {
+      backendUnreachableStore.set(true);
+    }
+    throw err;
+  }
+}
+
 // ===== Auth storage =====
 // Single source of truth for the JWT + user, shared between plain API
 // calls here and the React context in app/lib/auth.tsx.
@@ -232,7 +257,7 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 // ===== Auth API =====
 
 export async function login(email: string, password: string): Promise<AuthApiResponse> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  const response = await apiFetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -245,7 +270,7 @@ export async function register(
   password: string,
   organizationName: string
 ): Promise<AuthApiResponse> {
-  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+  const response = await apiFetch(`${API_BASE_URL}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, organizationName }),
@@ -259,7 +284,7 @@ export async function registerWithInvite(
   password: string,
   inviteCode: string
 ): Promise<AuthApiResponse> {
-  const response = await fetch(`${API_BASE_URL}/auth/register-with-invite`, {
+  const response = await apiFetch(`${API_BASE_URL}/auth/register-with-invite`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, inviteCode }),
@@ -269,11 +294,11 @@ export async function registerWithInvite(
 
 /** The caller's own record, read fresh from the DB -- used to detect a role change without waiting for re-login. */
 export async function getCurrentUser(): Promise<AuthUser> {
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+  const response = await apiFetch(`${API_BASE_URL}/auth/me`, {
     headers: authHeaders(),
     signal: AbortSignal.timeout(8000),
   });
-  if (response.status === 401) clearStoredAuth();
+  if (response.status === 401) signalSessionExpired();
   return parseJsonResponse<AuthUser>(response);
 }
 
@@ -292,7 +317,7 @@ export async function searchLogs(
     ? AbortSignal.any([AbortSignal.timeout(8000), opts.signal])
     : AbortSignal.timeout(8000);
 
-  const response = await fetch(`${API_BASE_URL}/logs/search`, {
+  const response = await apiFetch(`${API_BASE_URL}/logs/search`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -303,7 +328,7 @@ export async function searchLogs(
   });
 
   if (response.status === 401) {
-    clearStoredAuth();
+    signalSessionExpired();
   }
 
   const body = await parseJsonResponse<unknown>(response);
@@ -323,14 +348,14 @@ export async function generateApiKey(): Promise<string> {
     throw new ApiError(401, "Not authenticated");
   }
 
-  const response = await fetch(`${API_BASE_URL}/keys/generate`, {
+  const response = await apiFetch(`${API_BASE_URL}/keys/generate`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(8000),
   });
 
   if (response.status === 401) {
-    clearStoredAuth();
+    signalSessionExpired();
   }
 
   const body = await parseJsonResponse<{ apiKey: string }>(response);
@@ -348,32 +373,32 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
 }
 
 export async function listUsers(): Promise<TeamUser[]> {
-  const response = await fetch(`${API_BASE_URL}/users`, {
+  const response = await apiFetch(`${API_BASE_URL}/users`, {
     headers: authHeaders(),
     signal: AbortSignal.timeout(8000),
   });
-  if (response.status === 401) clearStoredAuth();
+  if (response.status === 401) signalSessionExpired();
   return parseJsonResponse<TeamUser[]>(response);
 }
 
 export async function updateUserRole(id: number, role: "ADMIN" | "USER"): Promise<TeamUser> {
-  const response = await fetch(`${API_BASE_URL}/users/${id}/role`, {
+  const response = await apiFetch(`${API_BASE_URL}/users/${id}/role`, {
     method: "PATCH",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ role }),
     signal: AbortSignal.timeout(8000),
   });
-  if (response.status === 401) clearStoredAuth();
+  if (response.status === 401) signalSessionExpired();
   return parseJsonResponse<TeamUser>(response);
 }
 
 export async function createInvite(): Promise<Invite> {
-  const response = await fetch(`${API_BASE_URL}/invites`, {
+  const response = await apiFetch(`${API_BASE_URL}/invites`, {
     method: "POST",
     headers: authHeaders(),
     signal: AbortSignal.timeout(8000),
   });
-  if (response.status === 401) clearStoredAuth();
+  if (response.status === 401) signalSessionExpired();
   return parseJsonResponse<Invite>(response);
 }
 
@@ -398,7 +423,7 @@ export function subscribeToLogStream(
 
   (async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/logs/stream`, {
+      const response = await apiFetch(`${API_BASE_URL}/logs/stream`, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });

@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, AuthUser, clearStoredAuth, getCurrentUser, getStoredAuth, setStoredAuth, updateStoredUser } from "./api";
+import { AuthUser, clearStoredAuth, getCurrentUser, getStoredAuth, setStoredAuth, updateStoredUser } from "./api";
 
 const ROLE_REFRESH_MS = 30000;
 
@@ -44,20 +44,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Re-reads the caller's own role/org from the DB, so a demotion (or
   // promotion) made in another tab/session is reflected here without
-  // waiting for the JWT to expire or the user to re-login. A network
-  // hiccup is swallowed -- only a genuine 401 (revoked/expired token)
-  // signs the user out.
+  // waiting for the JWT to expire or the user to re-login. Any error here
+  // (network hiccup or a real 401) is swallowed -- a 401 already triggers
+  // the global session-expiry flow via getCurrentUser's own
+  // signalSessionExpired() call (see SessionExpiryHandler), so there's no
+  // need to duplicate that reaction here.
   const refreshUser = useCallback(async () => {
     try {
       const fresh = await getCurrentUser();
       updateStoredUser(fresh);
       setUser(fresh);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        logout();
-      }
+    } catch {
+      // handled globally, or just a transient network error -- either way,
+      // nothing to do here.
     }
-  }, [logout]);
+  }, []);
 
   useEffect(() => {
     if (!token) return;
