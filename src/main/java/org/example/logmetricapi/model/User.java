@@ -31,7 +31,13 @@ public class User implements UserDetails {
     private Organization organization;
 
     // T37: gates login (see isEnabled()) until the signup OTP is confirmed.
-    @Column(nullable = false)
+    // columnDefinition spells out an explicit DEFAULT so Hibernate's ddl-auto=update
+    // can ALTER TABLE this in on top of an existing, already-populated `users` table --
+    // plain `nullable=false` with no default makes Postgres reject that ALTER outright
+    // once any row exists (it did, the hard way, against a pre-existing local dev DB).
+    // Existing rows backfill to false, i.e. "not verified yet, go through OTP" -- the
+    // safe default, and one the resend-verification flow already handles for free.
+    @Column(nullable = false, columnDefinition = "boolean not null default false")
     private boolean emailVerified = false;
 
     // --- Constructors ---
