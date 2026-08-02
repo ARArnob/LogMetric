@@ -318,6 +318,26 @@ export async function resendVerification(email: string): Promise<{ message: stri
   return parseJsonResponse<{ message: string }>(response);
 }
 
+/** Always resolves with the same generic message whether or not the address is registered -- stricter than resendVerification since the caller hasn't proven anything here. */
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return parseJsonResponse<{ message: string }>(response);
+}
+
+/** Confirms the reset code, sets the new password, and logs the user in -- also marks the account emailVerified, since proving inbox control satisfies that too. */
+export async function resetPassword(email: string, code: string, newPassword: string): Promise<AuthApiResponse> {
+  const response = await apiFetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code, newPassword }),
+  });
+  return parseJsonResponse<AuthApiResponse>(response);
+}
+
 /** The caller's own record, read fresh from the DB -- used to detect a role change without waiting for re-login. */
 export async function getCurrentUser(): Promise<AuthUser> {
   const response = await apiFetch(`${API_BASE_URL}/auth/me`, {

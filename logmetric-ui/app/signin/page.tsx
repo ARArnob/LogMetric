@@ -91,13 +91,18 @@ export default function SignIn() {
         </div>
 
         <div>
-          <label
-            className="block text-[11px] font-bold uppercase tracking-wider mb-1.5"
-            style={{ color: "var(--text-secondary)" }}
-            htmlFor="password"
-          >
-            Password
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label
+              className="block text-[11px] font-bold uppercase tracking-wider"
+              style={{ color: "var(--text-secondary)" }}
+              htmlFor="password"
+            >
+              Password
+            </label>
+            <Link href="/forgot-password" className="text-[11px] font-semibold" style={{ color: "var(--accent)" }}>
+              Forgot password?
+            </Link>
+          </div>
           <input
             id="password"
             type="password"

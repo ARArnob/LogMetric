@@ -3,11 +3,13 @@ package org.example.logmetricapi.controller;
 import jakarta.validation.Valid;
 import org.example.logmetricapi.dto.AuthResponse;
 import org.example.logmetricapi.dto.CurrentUserResponse;
+import org.example.logmetricapi.dto.ForgotPasswordRequest;
 import org.example.logmetricapi.dto.LoginRequest;
 import org.example.logmetricapi.dto.MessageResponse;
 import org.example.logmetricapi.dto.RegisterRequest;
 import org.example.logmetricapi.dto.RegisterWithInviteRequest;
 import org.example.logmetricapi.dto.ResendVerificationRequest;
+import org.example.logmetricapi.dto.ResetPasswordRequest;
 import org.example.logmetricapi.dto.VerificationPendingResponse;
 import org.example.logmetricapi.dto.VerifyEmailRequest;
 import org.example.logmetricapi.model.Organization;
@@ -168,6 +170,53 @@ public class AuthController {
             // be used to tell a real pending signup apart from a nonexistent one.
         }
         return ResponseEntity.ok(new MessageResponse("If that email has a pending verification, a new code has been sent."));
+    }
+
+    /**
+     * Always returns the same generic body, whether or not the address is
+     * registered -- unlike resend-verification, the caller here hasn't proven
+     * they own the address at all (no valid session, no prior signup step),
+     * so this is deliberately stricter about not leaking account existence.
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<MessageResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        try {
+            userRepository.findByEmail(request.getEmail())
+                    .ifPresent(u -> {
+                        String code = otpService.issue(u.getEmail(), OtpPurpose.PASSWORD_RESET);
+                        mailService.sendPasswordResetCode(u.getEmail(), code);
+                    });
+        } catch (ResponseStatusException e) {
+            // Resend cooldown or similar -- swallow it, same reasoning as resend-verification.
+        }
+        return ResponseEntity.ok(new MessageResponse("If that email is registered, a reset code has been sent."));
+    }
+
+    /**
+     * otpService.verify() is purpose-scoped, so a code issued here can never
+     * satisfy verify-email and vice versa -- no extra check needed for that.
+     * Also marks emailVerified=true: proving control of the inbox via a
+     * PASSWORD_RESET code is exactly what T37's signup verification was
+     * asking for, so this doubles as a self-service recovery path for any
+     * account left unverified (e.g. retroactively, by the T37 migration).
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<AuthResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        otpService.verify(request.getEmail(), OtpPurpose.PASSWORD_RESET, request.getCode());
+
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired code"));
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setEmailVerified(true);
+        userRepository.save(user);
+
+        String jwtToken = jwtService.generateToken(user);
+        return ResponseEntity.ok(new AuthResponse(
+                jwtToken,
+                user.getEmail(),
+                user.getRole().name(),
+                user.getOrganization().getId()
+        ));
     }
 
     @PostMapping("/login")
