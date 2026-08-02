@@ -71,8 +71,8 @@
   --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
   --shadow-lift: 0 2px 4px rgba(15, 23, 42, 0.08), 0 16px 40px rgba(15, 23, 42, 0.10);
 
-  --hero-glow-1: rgba(3, 105, 161, 0.10);
-  --hero-glow-2: rgba(139, 92, 246, 0.08);
+  --hero-glow-1: rgba(3, 105, 161, 0.16);
+  --hero-glow-2: rgba(139, 92, 246, 0.13);
   --grid-overlay: rgba(15, 23, 42, 0.06);
 
   /* On white, the mark colors are too light to read as text -- amber in

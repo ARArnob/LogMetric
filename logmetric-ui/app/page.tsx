@@ -255,7 +255,7 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="p-4 font-mono overflow-x-auto" style={{ fontSize: 11.5, lineHeight: 1.9, minHeight: 200 }}>
+              <div className="p-4 font-mono overflow-x-auto" style={{ fontSize: 11.5, lineHeight: 1.9, minHeight: 155 }}>
                 {terminalRows.map((row) => (
                   <div key={row.uid} className="flex items-start gap-3 whitespace-nowrap log-row-enter">
                     <span style={{ color: "var(--text-muted)" }}>{row.ts}</span>
