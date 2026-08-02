@@ -195,7 +195,7 @@ export default function Home() {
               style={{
                 background: "var(--ok-dim)",
                 border: "1px solid color-mix(in srgb, var(--ok) 30%, transparent)",
-                color: "var(--ok)",
+                color: "var(--ok-text)",
                 fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase",
               }}
             >
@@ -277,7 +277,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full pulse-live" style={{ background: "var(--ok)" }} />
-                  <span style={{ color: "var(--ok)", fontSize: 10, fontWeight: 700 }}>LIVE</span>
+                  <span style={{ color: "var(--ok-text)", fontSize: 10, fontWeight: 700 }}>LIVE</span>
                 </div>
               </div>
 

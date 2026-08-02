@@ -3,7 +3,7 @@ import { ReactNode } from "react";
 const VARIANT = {
   neutral: { bg: "var(--bg-inset)", color: "var(--text-muted)" },
   accent: { bg: "var(--accent-dim)", color: "var(--accent)" },
-  ok: { bg: "var(--ok-dim)", color: "var(--ok)" },
+  ok: { bg: "var(--ok-dim)", color: "var(--ok-text)" },
   error: { bg: "var(--sev-error-dim)", color: "var(--sev-error-text)" },
   warn: { bg: "var(--sev-warn-dim)", color: "var(--sev-warn-text)" },
 } as const;

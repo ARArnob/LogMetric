@@ -195,7 +195,7 @@ export default function AppShell({
             </button>
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full pulse-live shrink-0" style={{ background: "var(--ok)" }} />
-              <span className="text-xs font-semibold" style={{ color: "var(--ok)" }}>
+              <span className="text-xs font-semibold" style={{ color: "var(--ok-text)" }}>
                 Connected
               </span>
             </div>

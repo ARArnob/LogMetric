@@ -493,7 +493,7 @@ export default function LogStream({
               ❚❚ paused{bufferedCount > 0 ? ` · ${bufferedCount} event${bufferedCount === 1 ? "" : "s"} buffered` : ""}
             </span>
           ) : (
-            <span style={{ color: "var(--ok)" }}>● streaming</span>
+            <span style={{ color: "var(--ok-text)" }}>● streaming</span>
           )}
         </span>
       </div>

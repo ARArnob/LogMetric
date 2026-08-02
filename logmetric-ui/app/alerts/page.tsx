@@ -50,7 +50,9 @@ export default function AlertsPage() {
             >
               <Icon className="w-4 h-4" style={{ color: "var(--accent)" }} />
             </div>
-            <h3 className="font-bold text-[14px] mb-1.5">{title}</h3>
+            {/* h2, not h3 -- nothing else on this page sits between it and
+                AppShell's h1, so h3 would skip a level. */}
+            <h2 className="font-bold text-[14px] mb-1.5">{title}</h2>
             <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
               {desc}
             </p>
@@ -68,8 +70,13 @@ export default function AlertsPage() {
           Example — not live data
         </span>
       </div>
+      {/* Dashed border + the "Mockup" badge + the label above already say
+          "not real" -- opacity-70 here used to fade the whole card, which
+          also faded its text well under 4.5:1 contrast (as low as 2.1:1).
+          De-emphasizing "not live" content shouldn't come at the cost of
+          being able to read it. */}
       <div
-        className="card p-5 flex items-center justify-between gap-4 flex-wrap opacity-70"
+        className="card p-5 flex items-center justify-between gap-4 flex-wrap"
         style={{ borderStyle: "dashed" }}
       >
         <div className="flex items-center gap-3">

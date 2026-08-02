@@ -390,6 +390,9 @@ function FirstRunOnboarding() {
         </p>
       </div>
       <pre
+        tabIndex={0}
+        role="region"
+        aria-label="Example curl command"
         className="text-xs font-mono p-3 rounded-lg overflow-x-auto whitespace-pre text-left w-full"
         style={{ background: "var(--bg-inset)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
       >

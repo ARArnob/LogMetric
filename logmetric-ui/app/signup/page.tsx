@@ -247,8 +247,8 @@ function SignUpContent() {
 
         <p className="text-[11px] text-center leading-relaxed" style={{ color: "var(--text-muted)" }}>
           By signing up you agree to our{" "}
-          <a href="#" style={{ color: "var(--accent)" }}>Terms</a> and{" "}
-          <a href="#" style={{ color: "var(--accent)" }}>Privacy Policy</a>.
+          <a href="#" style={{ color: "var(--accent)", textDecoration: "underline" }}>Terms</a> and{" "}
+          <a href="#" style={{ color: "var(--accent)", textDecoration: "underline" }}>Privacy Policy</a>.
         </p>
       </form>
     </AuthLayout>

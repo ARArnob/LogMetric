@@ -25,6 +25,7 @@ export default function AuthLayout({
     >
       {/* Ambient background */}
       <div
+        aria-hidden="true"
         className="fixed inset-0 pointer-events-none"
         style={{
           backgroundImage: `linear-gradient(var(--grid-overlay) 1px, transparent 1px),
@@ -35,6 +36,7 @@ export default function AuthLayout({
         }}
       />
       <div
+        aria-hidden="true"
         className="fixed pointer-events-none"
         style={{
           top: "-10%",
@@ -50,9 +52,9 @@ export default function AuthLayout({
         <ThemeToggle compact />
       </div>
 
-      <div className="relative w-full max-w-[380px] animate-fade-up">
+      <main className="relative w-full max-w-[380px] animate-fade-up">
         <div className="flex flex-col items-center mb-7">
-          <Link href="/" style={{ textDecoration: "none" }}>
+          <Link href="/" aria-label="LogMetric home" style={{ textDecoration: "none" }}>
             <div
               className="relative w-12 h-12 rounded-xl flex items-center justify-center mb-4 mx-auto"
               style={{ background: "var(--accent-dim)", border: "1px solid var(--accent)" }}
@@ -91,7 +93,7 @@ export default function AuthLayout({
         <p className="text-center text-sm mt-5" style={{ color: "var(--text-muted)" }}>
           {footer}
         </p>
-      </div>
+      </main>
     </div>
   );
 }
