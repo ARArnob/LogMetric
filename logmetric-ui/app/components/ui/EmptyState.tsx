@@ -20,9 +20,11 @@ export default function EmptyState({
         {icon}
       </div>
       <div>
-        <h3 className="font-bold text-[15px] mb-1" style={{ color: "var(--text-primary)" }}>
+        {/* h2, not h3 -- on pages where this is the only content under the
+            page's h1 (AppShell's title), an h3 here would skip a level. */}
+        <h2 className="font-bold text-[15px] mb-1" style={{ color: "var(--text-primary)" }}>
           {title}
-        </h3>
+        </h2>
         {description && (
           <p className="text-[13px] max-w-sm" style={{ color: "var(--text-secondary)" }}>
             {description}

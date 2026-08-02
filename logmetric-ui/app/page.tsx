@@ -134,34 +134,17 @@ export default function Home() {
             </span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-3 text-sm">
-            <div className="flex items-center gap-1">
-              {NAV_LINKS.map(({ label, href }) => (
-                <a
-                  key={href}
-                  href={href}
-                  className="px-3 py-1.5 rounded-md transition-colors"
-                  style={{ color: "var(--text-secondary)", textDecoration: "none" }}
-                >
-                  {label}
-                </a>
-              ))}
-            </div>
-            {/* Static, not a link -- balances the two nav links visually
-                without pretending to be a third clickable destination. */}
-            <span
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-              style={{
-                background: "var(--ok-dim)",
-                border: "1px solid color-mix(in srgb, var(--ok) 30%, transparent)",
-                color: "var(--ok)",
-                fontSize: 11,
-                fontWeight: 700,
-              }}
-            >
-              <span className="w-1.5 h-1.5 rounded-full pulse-live" style={{ background: "var(--ok)" }} />
-              Open source
-            </span>
+          <nav className="hidden md:flex items-center gap-1 text-sm">
+            {NAV_LINKS.map(({ label, href }) => (
+              <a
+                key={href}
+                href={href}
+                className="px-3 py-1.5 rounded-md transition-colors"
+                style={{ color: "var(--text-secondary)", textDecoration: "none" }}
+              >
+                {label}
+              </a>
+            ))}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -414,13 +397,14 @@ export default function Home() {
           </div>
         </section>
 
-        {/* CTA -- min-h-screen isn't just visual weight for a closing section:
-            it also guarantees there's always at least one viewport's worth of
-            page below "Pipeline" (the last real nav anchor), so that anchor
-            can always scroll fully to the top on any screen height instead of
-            clamping against the bottom of a page that's too short to scroll
-            that far. */}
-        <section id="get-started" className="min-h-screen flex items-center px-5 py-16" style={{ scrollMarginTop: 80 }}>
+        {/* CTA -- bottom padding only, like every other section on this page
+            (Features/Pipeline are pb-24 with no top padding; adding py-* here
+            instead of pb-* doubled the visual gap below Pipeline and broke
+            the page's spacing rhythm). Slightly larger than pb-24 to still
+            leave a bit more room below "Pipeline" for it to scroll fully
+            into view, though that matters less now that "Get started" isn't
+            a nav link anymore -- there's no second anchor to collide with. */}
+        <section id="get-started" className="px-5 pb-24 md:pb-32" style={{ scrollMarginTop: 80 }}>
           <div className="max-w-4xl mx-auto w-full">
             <div
               className="card card-sheen p-10 md:p-14 text-center relative overflow-hidden"

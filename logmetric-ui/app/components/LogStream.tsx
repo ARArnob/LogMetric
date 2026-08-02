@@ -303,10 +303,10 @@ export default function LogStream({
             {paused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
             {paused ? "Resume" : "Pause"}
           </button>
-          <button onClick={onRefresh} className="btn btn-ghost" style={{ padding: 7 }} title="Refresh">
+          <button onClick={onRefresh} className="btn btn-ghost" style={{ padding: 7 }} title="Refresh" aria-label="Refresh">
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
-          <button onClick={exportCsv} className="btn btn-ghost" style={{ padding: 7 }} title="Export CSV">
+          <button onClick={exportCsv} className="btn btn-ghost" style={{ padding: 7 }} title="Export CSV" aria-label="Export CSV">
             <Download className="w-3.5 h-3.5" />
           </button>
         </div>
