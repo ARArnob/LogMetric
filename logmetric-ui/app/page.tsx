@@ -35,11 +35,17 @@ const FEATURES = [
 ];
 
 // Every entry must anchor to a section that actually exists on this page --
-// a nav link that scrolls nowhere is worse than a shorter nav.
+// a nav link that scrolls nowhere is worse than a shorter nav. A third real
+// link ("Get started") used to sit here pointing at the CTA section, but it
+// duplicated the header's own "Get started" button (same label, different
+// behavior) and, on most viewport heights, scrolled to nearly the same spot
+// as "Pipeline" anyway -- the CTA section was too short for the page to
+// scroll it fully into view, so both anchors clamped against the bottom of
+// the page. Visual balance now comes from the static badge next to these
+// two links instead of a third link with nowhere real to go.
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
   { label: "Pipeline", href: "#pipeline" },
-  { label: "Get started", href: "#get-started" },
 ];
 
 const PIPELINE = [
@@ -79,17 +85,34 @@ export default function Home() {
             </span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-1 text-sm">
-            {NAV_LINKS.map(({ label, href }) => (
-              <a
-                key={href}
-                href={href}
-                className="px-3 py-1.5 rounded-md transition-colors"
-                style={{ color: "var(--text-secondary)", textDecoration: "none" }}
-              >
-                {label}
-              </a>
-            ))}
+          <nav className="hidden md:flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-1">
+              {NAV_LINKS.map(({ label, href }) => (
+                <a
+                  key={href}
+                  href={href}
+                  className="px-3 py-1.5 rounded-md transition-colors"
+                  style={{ color: "var(--text-secondary)", textDecoration: "none" }}
+                >
+                  {label}
+                </a>
+              ))}
+            </div>
+            {/* Static, not a link -- balances the two nav links visually
+                without pretending to be a third clickable destination. */}
+            <span
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+              style={{
+                background: "var(--ok-dim)",
+                border: "1px solid color-mix(in srgb, var(--ok) 30%, transparent)",
+                color: "var(--ok)",
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full pulse-live" style={{ background: "var(--ok)" }} />
+              Open source
+            </span>
           </nav>
 
           <div className="flex items-center gap-2">
@@ -306,9 +329,14 @@ export default function Home() {
           </div>
         </section>
 
-        {/* CTA */}
-        <section id="get-started" className="px-5 pb-24" style={{ scrollMarginTop: 80 }}>
-          <div className="max-w-4xl mx-auto">
+        {/* CTA -- min-h-screen isn't just visual weight for a closing section:
+            it also guarantees there's always at least one viewport's worth of
+            page below "Pipeline" (the last real nav anchor), so that anchor
+            can always scroll fully to the top on any screen height instead of
+            clamping against the bottom of a page that's too short to scroll
+            that far. */}
+        <section id="get-started" className="min-h-screen flex items-center px-5 py-16" style={{ scrollMarginTop: 80 }}>
+          <div className="max-w-4xl mx-auto w-full">
             <div
               className="card card-sheen p-10 md:p-14 text-center relative overflow-hidden"
               style={{
