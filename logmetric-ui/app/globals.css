@@ -446,6 +446,14 @@ input::placeholder { color: var(--text-muted); }
 }
 .drawer-enter { animation: drawerIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
+/* Bottom sheet -- Drawer's mobile presentation (F19). Slides up instead of
+   in from the right, since there's no room for a side panel on a phone. */
+@keyframes sheetIn {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.sheet-enter { animation: sheetIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
 /* ============================================================
    SCROLLBAR
    ============================================================ */
