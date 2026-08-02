@@ -16,7 +16,6 @@ import {
   Waves,
 } from "lucide-react";
 import ThemeToggle from "./components/ThemeToggle";
-import { useTheme, THEMES, THEME_META } from "./lib/theme";
 
 // Badge text uses the -text tokens so the level stays legible on the light
 // theme. This pool is cycled by TerminalWindow (F16) rather than rendered
@@ -103,7 +102,6 @@ const PIPELINE = [
 ];
 
 export default function Home() {
-  const { theme, setTheme } = useTheme();
   const terminalRows = useTerminalRows();
 
   return (
@@ -212,16 +210,19 @@ export default function Home() {
               <span className="gradient-text">at machine scale</span>
             </h1>
 
+            {/* Deliberately short: the badge above already claims real-time
+                and multi-tenant, so repeating them here just made the hero
+                read as a wall of text. This says what it *does*; the
+                Features section says the rest. */}
             <p
-              className="animate-fade-up d2 text-base md:text-lg max-w-xl mx-auto mb-9"
+              className="animate-fade-up d2 text-base md:text-lg max-w-lg mx-auto mb-9"
               style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}
             >
-              LogMetric ingests log events asynchronously, clusters them by SHA-256 pattern hash,
-              and streams anomalies to your dashboard in real time — with every read scoped to
-              your organization.
+              Asynchronous ingestion, SHA-256 pattern clustering, and live anomaly detection —
+              in one pipeline.
             </p>
 
-            <div className="animate-fade-up d3 flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
+            <div className="animate-fade-up d3 flex flex-col sm:flex-row items-center justify-center gap-3 mb-14">
               <Link href="/signup" className="btn btn-primary w-full sm:w-auto" style={{ padding: "12px 24px" }}>
                 Start ingesting logs
                 <ArrowRight className="w-4 h-4" />
@@ -230,33 +231,6 @@ export default function Home() {
                 <Activity className="w-4 h-4" style={{ color: "var(--accent)" }} />
                 Sign in to dashboard
               </Link>
-            </div>
-
-            {/* Live theme preview -- lets a visitor feel the product's polish
-                in one click, before ever creating an account. */}
-            <div className="animate-fade-up d3 flex flex-col items-center gap-2 mb-14">
-              <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                Try it live
-              </p>
-              <div className="flex items-center gap-1.5 p-1 rounded-full" style={{ background: "var(--bg-inset)", border: "1px solid var(--border-subtle)" }}>
-                {THEMES.map((t) => {
-                  const active = theme === t;
-                  return (
-                    <button
-                      key={t}
-                      onClick={() => setTheme(t)}
-                      className="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors"
-                      style={{
-                        background: active ? "var(--accent)" : "transparent",
-                        color: active ? "var(--accent-contrast)" : "var(--text-secondary)",
-                      }}
-                      aria-pressed={active}
-                    >
-                      {THEME_META[t].label}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
           </div>
 
