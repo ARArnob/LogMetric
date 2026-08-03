@@ -1,17 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Key, AlertTriangle } from "lucide-react";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import CopyButton from "../ui/CopyButton";
-import { API_BASE_URL, generateApiKey } from "../../lib/api";
+import Badge from "../ui/Badge";
+import { ApiKeyInfo, API_BASE_URL, generateApiKey, listApiKeys } from "../../lib/api";
 import { useToast } from "../../lib/toast";
+
+function formatCreatedAt(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 
 export default function ApiKeySection({ isAdmin }: { isAdmin: boolean }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [key, setKey] = useState<string | null>(null);
+  const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
   const toast = useToast();
+
+  const refreshKeys = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      setKeys(await listApiKeys());
+    } catch {
+      // Silent -- generation still works even if this list fails to load; a
+      // toast for a background list refresh would be noise (same pattern as
+      // InviteCard's outstanding-invites refresh).
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    refreshKeys();
+  }, [refreshKeys]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -20,6 +44,7 @@ export default function ApiKeySection({ isAdmin }: { isAdmin: boolean }) {
       setKey(apiKey);
       setConfirmOpen(false);
       toast.success("API key generated");
+      refreshKeys();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't generate a key");
     } finally {
@@ -105,8 +130,37 @@ export default function ApiKeySection({ isAdmin }: { isAdmin: boolean }) {
         </div>
       )}
 
+      {keys.length > 0 && (
+        <div className="mt-5 pt-4" style={{ borderTop: "1px solid var(--border-subtle)" }}>
+          <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
+            Existing keys
+          </h3>
+          <ul className="flex flex-col gap-1.5">
+            {keys.map((k) => (
+              <li
+                key={k.id}
+                className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm"
+                style={{ background: "var(--bg-inset)" }}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <code className="font-mono text-xs truncate" style={{ color: "var(--text-primary)" }}>
+                    {k.maskedHint}
+                  </code>
+                  {k.systemName && <Badge variant="neutral">{k.systemName}</Badge>}
+                  {k.revoked && <Badge variant="error">Revoked</Badge>}
+                </div>
+                <span className="text-xs shrink-0" style={{ color: "var(--text-muted)" }}>
+                  {formatCreatedAt(k.createdAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <p className="text-xs mt-4" style={{ color: "var(--text-muted)" }}>
-        There&apos;s no way to list existing keys yet -- if you lose one, generate a new one.
+        A key&apos;s full value is only ever shown once, right after generation -- it&apos;s stored
+        hashed and can&apos;t be retrieved again. If you lose one, generate a new one.
       </p>
 
       <ConfirmDialog

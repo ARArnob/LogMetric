@@ -440,9 +440,10 @@ export async function createSystem(name: string): Promise<SystemInfo> {
 // ===== API keys (authenticated, ADMIN only) =====
 
 /**
- * The raw key is only ever returned by this call -- the server stores it
- * hashed and cannot show it again. There is no corresponding "list keys"
- * endpoint yet, so the UI must not pretend one exists.
+ * The raw key is only ever returned by generateApiKey() below -- the server
+ * stores it hashed and cannot show it again. listApiKeys() (B5) surfaces
+ * everything else: a masked hint, creation date, owning system, and whether
+ * it's been revoked.
  */
 export async function generateApiKey(): Promise<string> {
   const token = getToken();
@@ -465,6 +466,24 @@ export async function generateApiKey(): Promise<string> {
 
   const body = await parseJsonResponse<{ apiKey: string }>(response);
   return body.apiKey;
+}
+
+export interface ApiKeyInfo {
+  id: number;
+  maskedHint: string;
+  createdAt: string;
+  revoked: boolean;
+  systemId: number | null;
+  systemName: string | null;
+}
+
+export async function listApiKeys(): Promise<ApiKeyInfo[]> {
+  const response = await apiFetch(`${API_BASE_URL}/keys`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<ApiKeyInfo[]>(response);
 }
 
 // ===== Team: users & invites (authenticated, most ADMIN only) =====

@@ -131,6 +131,7 @@ class TenantIsolationAndRbacTests {
         RegisteredUser member = joinOrgAsUser(inviteCode);
 
         assertStatus(post("/api/systems/" + systemId + "/keys"), member.token(), 403);
+        assertStatus(get("/api/keys"), member.token(), 403);
         assertStatus(get("/api/users"), member.token(), 403);
         assertStatus(post("/api/invites"), member.token(), 403);
         // authorization is denied before the target id is even looked up, so an
@@ -149,6 +150,7 @@ class TenantIsolationAndRbacTests {
         long systemId = createSystem(admin.token());
 
         assertStatus(post("/api/systems/" + systemId + "/keys"), admin.token(), 200);
+        assertStatus(get("/api/keys"), admin.token(), 200);
         assertStatus(get("/api/users"), admin.token(), 200);
         assertStatus(post("/api/invites"), admin.token(), 200);
     }
@@ -158,6 +160,36 @@ class TenantIsolationAndRbacTests {
         mockMvc.perform(get("/api/users")).andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/invites")).andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/systems/1/keys")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/keys")).andExpect(status().isUnauthorized());
+    }
+
+    // B5 (UI-PLAN.md): GET /api/keys lists key metadata, org-scoped, and never
+    // leaks the raw key -- only the same 8-char prefix already shown once at
+    // generation time.
+    @Test
+    void apiKeyList_isOrgScopedAndNeverExposesTheRawKey() throws Exception {
+        RegisteredUser orgA = registerNewOrg();
+        long systemId = createSystem(orgA.token());
+        MvcResult genResult = mockMvc.perform(post("/api/systems/" + systemId + "/keys")
+                        .header("Authorization", "Bearer " + orgA.token()))
+                .andReturn();
+        assertThat(genResult.getResponse().getStatus()).isEqualTo(200);
+        String rawKey = objectMapper.readTree(genResult.getResponse().getContentAsString()).get("apiKey").asText();
+
+        MvcResult listResult = mockMvc.perform(get("/api/keys").header("Authorization", "Bearer " + orgA.token()))
+                .andReturn();
+        assertThat(listResult.getResponse().getStatus()).isEqualTo(200);
+        JsonNode keys = objectMapper.readTree(listResult.getResponse().getContentAsString());
+        assertThat(keys).hasSize(1);
+        assertThat(keys.get(0).get("maskedHint").asText()).isEqualTo(rawKey.substring(0, 8) + "…");
+        assertThat(listResult.getResponse().getContentAsString()).doesNotContain(rawKey);
+        assertThat(keys.get(0).get("systemId").asLong()).isEqualTo(systemId);
+        assertThat(keys.get(0).get("revoked").asBoolean()).isFalse();
+
+        RegisteredUser orgB = registerNewOrg();
+        MvcResult listResultB = mockMvc.perform(get("/api/keys").header("Authorization", "Bearer " + orgB.token()))
+                .andReturn();
+        assertThat(objectMapper.readTree(listResultB.getResponse().getContentAsString())).isEmpty();
     }
 
     // ===== helpers =====
