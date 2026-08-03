@@ -1,75 +1,59 @@
 package org.example.logmetricapi.scheduler;
 
-import org.example.logmetricapi.model.LogEntry;
-import org.example.logmetricapi.service.LogAnalyticsService;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-
-import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.query.Criteria;
-import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
+import org.example.logmetricapi.model.AlertRule;
+import org.example.logmetricapi.repository.AlertRuleRepository;
+import org.example.logmetricapi.service.AlertDeliveryService;
+import org.example.logmetricapi.service.AlertEvaluationService;
+import org.example.logmetricapi.service.AlertEvaluationService.EvaluationResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
+/**
+ * Rule- and org-driven (PLAN.md T21) -- replaces the previous version, which
+ * swept every organization's logs in one unscoped query and printed to
+ * System.out. Each enabled AlertRule now gets its own org-scoped evaluation
+ * over its own window, and an anomaly triggers real delivery (email + SSE)
+ * instead of a console line.
+ */
 @Component
 public class AlertScheduler {
 
-    private final ElasticsearchOperations elasticsearchOperations;
-    private final LogAnalyticsService logAnalyticsService;
+    private static final Logger log = LoggerFactory.getLogger(AlertScheduler.class);
 
-    public AlertScheduler(ElasticsearchOperations elasticsearchOperations, 
-                          LogAnalyticsService logAnalyticsService) {
-        this.elasticsearchOperations = elasticsearchOperations;
-        this.logAnalyticsService = logAnalyticsService;
+    private final AlertRuleRepository alertRuleRepository;
+    private final AlertEvaluationService alertEvaluationService;
+    private final AlertDeliveryService alertDeliveryService;
+
+    public AlertScheduler(AlertRuleRepository alertRuleRepository,
+                           AlertEvaluationService alertEvaluationService,
+                           AlertDeliveryService alertDeliveryService) {
+        this.alertRuleRepository = alertRuleRepository;
+        this.alertEvaluationService = alertEvaluationService;
+        this.alertDeliveryService = alertDeliveryService;
     }
 
     @Scheduled(fixedRate = 60000)
-    public void evaluateTrafficAnomalies() {
-        long now = System.currentTimeMillis();
-        long sixtySecondsAgo = now - 60000;
+    public void evaluateAlertRules() {
+        List<AlertRule> rules = alertRuleRepository.findByEnabledTrue();
 
-        Criteria criteria = new Criteria("timestamp").between(sixtySecondsAgo, now);
-        CriteriaQuery query = new CriteriaQuery(criteria);
-        
-        query.setMaxResults(10000);
+        for (AlertRule rule : rules) {
+            EvaluationResult result = alertEvaluationService.evaluate(rule);
+            if (!result.triggered()) {
+                continue;
+            }
 
-        SearchHits<LogEntry> searchHits = elasticsearchOperations.search(query, LogEntry.class);
-        
-        List<LogEntry> logs = searchHits.getSearchHits().stream()
-                .map(hit -> hit.getContent())
-                .collect(Collectors.toList());
-
-        Map<String, Long> serviceCounts = logs.stream()
-                .collect(Collectors.groupingBy(
-                        log -> log.getServiceName() != null ? log.getServiceName() : "UNKNOWN_SERVICE",
-                        Collectors.counting()
-                ));
-
-        System.out.println("--- Traffic Check ---");
-
-        for (Map.Entry<String, Long> entry : serviceCounts.entrySet()) {
-            String serviceName = entry.getKey();
-            long count = entry.getValue();
-
-            double zScore = logAnalyticsService.calculateDynamicZScore(serviceName, count);
-            boolean isAnomalous = logAnalyticsService.isTrafficAnomalous(zScore);
-
-            System.out.println("Service: " + serviceName + " | Log Count: " + count + " | Z-Score: " + String.format("%.2f", zScore));
-
-            if (isAnomalous) {
-                System.out.println("🚨 URGENT: Volumetric Traffic Anomaly Detected for service: " + serviceName + "!");
+            boolean delivered = alertDeliveryService.deliver(rule, result.detail());
+            if (delivered) {
+                log.info("Alert rule '{}' (org {}) triggered: {}",
+                        rule.getName(), rule.getOrganization().getId(), result.detail());
+            } else {
+                log.debug("Alert rule '{}' (org {}) triggered but is within its cooldown -- suppressed",
+                        rule.getName(), rule.getOrganization().getId());
             }
         }
-
-        for (LogEntry log : logs) {
-            if (log.getMessage() != null && logAnalyticsService.isPayloadObfuscated(log.getMessage())) {
-                System.out.println("🚨 SEMANTIC ANOMALY DETECTED | Log ID: " + log.getId());
-            }
-        }
-        
-        System.out.println("---------------------");
     }
 }

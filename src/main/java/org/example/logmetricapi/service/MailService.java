@@ -5,6 +5,8 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
+import java.util.Set;
+
 @Service
 public class MailService {
 
@@ -26,6 +28,24 @@ public class MailService {
         send(to, "Reset your LogMetric password",
                 "Your LogMetric password reset code is: " + code + "\n\n" +
                         "This code expires in 10 minutes. If you didn't request this, you can ignore this email.");
+    }
+
+    /**
+     * One send() call with every recipient in the To header, not one email
+     * per recipient -- a sustained incident already has a cooldown limiting
+     * how often this fires (AlertDeliveryService); fanning it out further
+     * per-recipient would multiply that by list size for no benefit.
+     */
+    public void sendAlertNotification(Set<String> recipients, String ruleName, String detail) {
+        if (recipients == null || recipients.isEmpty()) {
+            return;
+        }
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromAddress);
+        message.setTo(recipients.toArray(new String[0]));
+        message.setSubject("LogMetric alert: " + ruleName);
+        message.setText(detail);
+        mailSender.send(message);
     }
 
     private void send(String to, String subject, String text) {

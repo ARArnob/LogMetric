@@ -8,8 +8,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class LogAnalyticsService {
 
-    private static final double ENTROPY_THRESHOLD = 4.8;
-    private static final double Z_SCORE_THRESHOLD = 3.0;
     private static final double ALPHA = 0.1;
     private static final int ENTROPY_WINDOW_SIZE = 32;
 
@@ -52,8 +50,8 @@ public class LogAnalyticsService {
         return entropy;
     }
 
-    public boolean isPayloadObfuscated(String payload) {
-        return calculateMaxWindowEntropy(payload) > ENTROPY_THRESHOLD;
+    public boolean isPayloadObfuscated(String payload, double threshold) {
+        return calculateMaxWindowEntropy(payload) > threshold;
     }
 
     public double calculateDynamicZScore(String key, long currentTrafficCount) {
@@ -77,7 +75,7 @@ public class LogAnalyticsService {
         }
     }
 
-    public boolean isTrafficAnomalous(double zScore) {
-        return zScore > Z_SCORE_THRESHOLD;
+    public boolean isTrafficAnomalous(double zScore, double threshold) {
+        return zScore > threshold;
     }
 }
