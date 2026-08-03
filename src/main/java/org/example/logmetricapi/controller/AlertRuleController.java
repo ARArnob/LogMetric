@@ -4,11 +4,13 @@ import jakarta.validation.Valid;
 import org.example.logmetricapi.dto.AlertRuleRequest;
 import org.example.logmetricapi.dto.AlertRuleResponse;
 import org.example.logmetricapi.model.AlertRule;
+import org.example.logmetricapi.model.AuditAction;
 import org.example.logmetricapi.model.Organization;
 import org.example.logmetricapi.model.User;
 import org.example.logmetricapi.repository.AlertRuleRepository;
 import org.example.logmetricapi.repository.OrganizationRepository;
 import org.example.logmetricapi.repository.UserRepository;
+import org.example.logmetricapi.service.AuditLogService;
 import org.example.logmetricapi.util.AuthUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,13 +35,16 @@ public class AlertRuleController {
     private final AlertRuleRepository alertRuleRepository;
     private final OrganizationRepository organizationRepository;
     private final UserRepository userRepository;
+    private final AuditLogService auditLogService;
 
     public AlertRuleController(AlertRuleRepository alertRuleRepository,
                                  OrganizationRepository organizationRepository,
-                                 UserRepository userRepository) {
+                                 UserRepository userRepository,
+                                 AuditLogService auditLogService) {
         this.alertRuleRepository = alertRuleRepository;
         this.organizationRepository = organizationRepository;
         this.userRepository = userRepository;
+        this.auditLogService = auditLogService;
     }
 
     @PostMapping
@@ -53,6 +58,7 @@ public class AlertRuleController {
         applyRequest(rule, request, orgId);
         rule.setCreatedAt(Timestamp.from(Instant.now()));
         alertRuleRepository.save(rule);
+        auditLogService.record(orgId, requireActorEmail(), AuditAction.ALERT_RULE_CREATED, rule.getName());
 
         return ResponseEntity.ok(toResponse(rule));
     }
@@ -74,6 +80,7 @@ public class AlertRuleController {
 
         applyRequest(rule, request, orgId);
         alertRuleRepository.save(rule);
+        auditLogService.record(orgId, requireActorEmail(), AuditAction.ALERT_RULE_UPDATED, rule.getName());
 
         return ResponseEntity.ok(toResponse(rule));
     }
@@ -84,6 +91,7 @@ public class AlertRuleController {
         AlertRule rule = alertRuleRepository.findByIdAndOrganizationId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Alert rule not found"));
         alertRuleRepository.delete(rule);
+        auditLogService.record(orgId, requireActorEmail(), AuditAction.ALERT_RULE_DELETED, rule.getName());
         return ResponseEntity.noContent().build();
     }
 
@@ -126,6 +134,11 @@ public class AlertRuleController {
     private Long requireOrgId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return AuthUtils.requireOrganizationId(authentication);
+    }
+
+    private String requireActorEmail() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return AuthUtils.requireUser(authentication).getEmail();
     }
 
     private AlertRuleResponse toResponse(AlertRule rule) {

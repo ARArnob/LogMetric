@@ -10,6 +10,7 @@ import {
   BellRing,
   Settings,
   Users,
+  History,
   LogOut,
   Sun,
   Moon,
@@ -46,6 +47,7 @@ const NAV_PAGES: { href: string; label: string; icon: ReactNode; adminOnly?: boo
   { href: "/alerts", label: "Alerts", icon: <BellRing className="w-4 h-4" /> },
   { href: "/settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
   { href: "/team", label: "Team", icon: <Users className="w-4 h-4" />, adminOnly: true },
+  { href: "/audit", label: "Audit Log", icon: <History className="w-4 h-4" />, adminOnly: true },
 ];
 
 const LEVELS: { level: string; icon: ReactNode }[] = [

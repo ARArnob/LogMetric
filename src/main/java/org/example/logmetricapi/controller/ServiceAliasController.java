@@ -3,10 +3,12 @@ package org.example.logmetricapi.controller;
 import jakarta.validation.Valid;
 import org.example.logmetricapi.dto.ServiceAliasResponse;
 import org.example.logmetricapi.dto.UpsertServiceAliasRequest;
+import org.example.logmetricapi.model.AuditAction;
 import org.example.logmetricapi.model.Organization;
 import org.example.logmetricapi.model.ServiceAlias;
 import org.example.logmetricapi.repository.OrganizationRepository;
 import org.example.logmetricapi.repository.ServiceAliasRepository;
+import org.example.logmetricapi.service.AuditLogService;
 import org.example.logmetricapi.util.AuthUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -31,10 +33,14 @@ public class ServiceAliasController {
 
     private final ServiceAliasRepository serviceAliasRepository;
     private final OrganizationRepository organizationRepository;
+    private final AuditLogService auditLogService;
 
-    public ServiceAliasController(ServiceAliasRepository serviceAliasRepository, OrganizationRepository organizationRepository) {
+    public ServiceAliasController(ServiceAliasRepository serviceAliasRepository,
+                                    OrganizationRepository organizationRepository,
+                                    AuditLogService auditLogService) {
         this.serviceAliasRepository = serviceAliasRepository;
         this.organizationRepository = organizationRepository;
+        this.auditLogService = auditLogService;
     }
 
     // Any authenticated org member can read the alias map -- it's just
@@ -70,6 +76,8 @@ public class ServiceAliasController {
                 });
         alias.setDisplayName(request.getDisplayName());
         serviceAliasRepository.save(alias);
+        auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
+                AuditAction.SERVICE_ALIAS_SET, alias.getRawServiceName() + " -> " + alias.getDisplayName());
 
         return ResponseEntity.ok(new ServiceAliasResponse(alias.getRawServiceName(), alias.getDisplayName()));
     }
@@ -85,6 +93,8 @@ public class ServiceAliasController {
         Long orgId = AuthUtils.requireOrganizationId(authentication);
 
         serviceAliasRepository.deleteByOrganizationIdAndRawServiceName(orgId, rawServiceName);
+        auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
+                AuditAction.SERVICE_ALIAS_DELETED, rawServiceName);
         return ResponseEntity.noContent().build();
     }
 }

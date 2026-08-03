@@ -11,6 +11,7 @@ import {
   BellRing,
   Settings,
   Users,
+  History,
   LogOut,
   Menu,
   Search,
@@ -35,6 +36,7 @@ const NAV: NavItem[] = [
   { href: "/alerts", label: "Alerts", icon: BellRing },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/team", label: "Team", icon: Users, adminOnly: true },
+  { href: "/audit", label: "Audit Log", icon: History, adminOnly: true },
 ];
 
 export default function AppShell({

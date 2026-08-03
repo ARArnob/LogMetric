@@ -3,11 +3,13 @@ package org.example.logmetricapi.controller;
 import jakarta.validation.Valid;
 import org.example.logmetricapi.dto.SystemRequest;
 import org.example.logmetricapi.dto.SystemResponse;
+import org.example.logmetricapi.model.AuditAction;
 import org.example.logmetricapi.model.Organization;
 import org.example.logmetricapi.model.SystemEntity;
 import org.example.logmetricapi.repository.OrganizationRepository;
 import org.example.logmetricapi.repository.SystemRepository;
 import org.example.logmetricapi.service.ApiKeyService;
+import org.example.logmetricapi.service.AuditLogService;
 import org.example.logmetricapi.util.AuthUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,13 +31,16 @@ public class SystemController {
     private final SystemRepository systemRepository;
     private final OrganizationRepository organizationRepository;
     private final ApiKeyService apiKeyService;
+    private final AuditLogService auditLogService;
 
     public SystemController(SystemRepository systemRepository,
                               OrganizationRepository organizationRepository,
-                              ApiKeyService apiKeyService) {
+                              ApiKeyService apiKeyService,
+                              AuditLogService auditLogService) {
         this.systemRepository = systemRepository;
         this.organizationRepository = organizationRepository;
         this.apiKeyService = apiKeyService;
+        this.auditLogService = auditLogService;
     }
 
     @PostMapping
@@ -52,6 +57,8 @@ public class SystemController {
         system.setOrganization(org);
         system.setCreatedAt(Timestamp.from(Instant.now()));
         system = systemRepository.save(system);
+        auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
+                AuditAction.SYSTEM_CREATED, system.getName());
 
         return ResponseEntity.ok(toResponse(system));
     }
@@ -79,6 +86,8 @@ public class SystemController {
         SystemEntity system = systemRepository.findByIdAndOrganizationId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "System not found"));
         systemRepository.delete(system);
+        auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
+                AuditAction.SYSTEM_DELETED, system.getName());
 
         return ResponseEntity.noContent().build();
     }
@@ -93,6 +102,8 @@ public class SystemController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "System not found"));
 
         String rawKey = apiKeyService.generateKey(system);
+        auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
+                AuditAction.KEY_GENERATED, system.getName());
         return ResponseEntity.ok(Map.of("apiKey", rawKey));
     }
 

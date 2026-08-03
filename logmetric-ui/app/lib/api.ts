@@ -765,6 +765,45 @@ export function subscribeToAlertStream(
   };
 }
 
+// ===== Audit log (ADMIN only) =====
+// PLAN.md T24: every admin-facing mutation (and login) is recorded org-scoped.
+// Reads are paginated -- history grows unboundedly otherwise -- and purge is
+// a caller-chosen retention window, not a silent background sweep.
+
+export interface AuditLogEntry {
+  id: number;
+  actorEmail: string;
+  action: string;
+  detail: string | null;
+  createdAt: string;
+}
+
+export interface AuditLogPage {
+  logs: AuditLogEntry[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+export async function listAuditLogs(page = 0, size = 50): Promise<AuditLogPage> {
+  const response = await apiFetch(`${API_BASE_URL}/audit-logs?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<AuditLogPage>(response);
+}
+
+export async function purgeAuditLogs(olderThanDays: number): Promise<{ deleted: number }> {
+  const response = await apiFetch(`${API_BASE_URL}/audit-logs?olderThanDays=${olderThanDays}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<{ deleted: number }>(response);
+}
+
 // ===== Live tail (SSE, authenticated) =====
 
 const SSE_RETRY_BASE_MS = 1000;

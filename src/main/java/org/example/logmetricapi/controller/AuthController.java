@@ -13,6 +13,7 @@ import org.example.logmetricapi.dto.ResendVerificationRequest;
 import org.example.logmetricapi.dto.ResetPasswordRequest;
 import org.example.logmetricapi.dto.VerificationPendingResponse;
 import org.example.logmetricapi.dto.VerifyEmailRequest;
+import org.example.logmetricapi.model.AuditAction;
 import org.example.logmetricapi.model.Organization;
 import org.example.logmetricapi.model.OtpPurpose;
 import org.example.logmetricapi.model.Role;
@@ -21,6 +22,7 @@ import org.example.logmetricapi.model.User;
 import org.example.logmetricapi.repository.OrganizationRepository;
 import org.example.logmetricapi.repository.SystemRepository;
 import org.example.logmetricapi.repository.UserRepository;
+import org.example.logmetricapi.service.AuditLogService;
 import org.example.logmetricapi.service.InviteService;
 import org.example.logmetricapi.service.JwtService;
 import org.example.logmetricapi.service.MailService;
@@ -55,6 +57,7 @@ public class AuthController {
     private final InviteService inviteService;
     private final OtpService otpService;
     private final MailService mailService;
+    private final AuditLogService auditLogService;
 
     public AuthController(
             UserRepository userRepository,
@@ -65,7 +68,8 @@ public class AuthController {
             AuthenticationManager authenticationManager,
             InviteService inviteService,
             OtpService otpService,
-            MailService mailService
+            MailService mailService,
+            AuditLogService auditLogService
     ) {
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
@@ -76,6 +80,7 @@ public class AuthController {
         this.inviteService = inviteService;
         this.otpService = otpService;
         this.mailService = mailService;
+        this.auditLogService = auditLogService;
     }
 
     @PostMapping("/register")
@@ -249,6 +254,7 @@ public class AuthController {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
         String jwtToken = jwtService.generateToken(user);
+        auditLogService.record(user.getOrganization().getId(), user.getEmail(), AuditAction.LOGIN, null);
 
         return ResponseEntity.ok(new AuthResponse(
                 jwtToken,
@@ -275,6 +281,7 @@ public class AuthController {
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+        auditLogService.record(user.getOrganization().getId(), user.getEmail(), AuditAction.PASSWORD_CHANGED, null);
 
         return ResponseEntity.ok(new MessageResponse("Password changed"));
     }

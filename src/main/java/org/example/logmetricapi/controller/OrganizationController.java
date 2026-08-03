@@ -3,8 +3,10 @@ package org.example.logmetricapi.controller;
 import jakarta.validation.Valid;
 import org.example.logmetricapi.dto.OrganizationResponse;
 import org.example.logmetricapi.dto.UpdateOrganizationRequest;
+import org.example.logmetricapi.model.AuditAction;
 import org.example.logmetricapi.model.Organization;
 import org.example.logmetricapi.repository.OrganizationRepository;
+import org.example.logmetricapi.service.AuditLogService;
 import org.example.logmetricapi.util.AuthUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,9 +21,11 @@ import org.springframework.web.server.ResponseStatusException;
 public class OrganizationController {
 
     private final OrganizationRepository organizationRepository;
+    private final AuditLogService auditLogService;
 
-    public OrganizationController(OrganizationRepository organizationRepository) {
+    public OrganizationController(OrganizationRepository organizationRepository, AuditLogService auditLogService) {
         this.organizationRepository = organizationRepository;
+        this.auditLogService = auditLogService;
     }
 
     // No path id -- like /api/invites and /api/keys/generate, this always
@@ -43,8 +47,11 @@ public class OrganizationController {
 
         Organization org = organizationRepository.findById(orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
+        String previousName = org.getName();
         org.setName(request.getName());
         organizationRepository.save(org);
+        auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
+                AuditAction.ORGANIZATION_RENAMED, previousName + " -> " + org.getName());
 
         return ResponseEntity.ok(new OrganizationResponse(org.getId(), org.getName()));
     }

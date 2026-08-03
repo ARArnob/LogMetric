@@ -2,10 +2,12 @@ package org.example.logmetricapi.controller;
 
 import org.example.logmetricapi.dto.InviteListItemResponse;
 import org.example.logmetricapi.dto.InviteResponse;
+import org.example.logmetricapi.model.AuditAction;
 import org.example.logmetricapi.model.InviteToken;
 import org.example.logmetricapi.model.Organization;
 import org.example.logmetricapi.repository.InviteTokenRepository;
 import org.example.logmetricapi.repository.OrganizationRepository;
+import org.example.logmetricapi.service.AuditLogService;
 import org.example.logmetricapi.service.InviteService;
 import org.example.logmetricapi.util.AuthUtils;
 import org.springframework.http.HttpStatus;
@@ -27,13 +29,16 @@ public class InviteController {
     private final InviteService inviteService;
     private final OrganizationRepository organizationRepository;
     private final InviteTokenRepository inviteTokenRepository;
+    private final AuditLogService auditLogService;
 
     public InviteController(InviteService inviteService,
                               OrganizationRepository organizationRepository,
-                              InviteTokenRepository inviteTokenRepository) {
+                              InviteTokenRepository inviteTokenRepository,
+                              AuditLogService auditLogService) {
         this.inviteService = inviteService;
         this.organizationRepository = organizationRepository;
         this.inviteTokenRepository = inviteTokenRepository;
+        this.auditLogService = auditLogService;
     }
 
     @PostMapping
@@ -45,6 +50,11 @@ public class InviteController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
 
         InviteToken invite = inviteService.createInvite(organization);
+        // Detail is the invite's id, not its code -- the code is a live bearer
+        // credential, and there's no reason to duplicate it into a second,
+        // longer-retained table when GET /api/invites already shows it.
+        auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
+                AuditAction.INVITE_CREATED, "invite #" + invite.getId());
 
         return ResponseEntity.ok(new InviteResponse(invite.getCode(), invite.getExpiresAt().toInstant().toString()));
     }
@@ -89,6 +99,8 @@ public class InviteController {
         // redeemed/revoked this" for later.
         invite.setUsed(true);
         inviteTokenRepository.save(invite);
+        auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
+                AuditAction.INVITE_REVOKED, "invite #" + invite.getId());
 
         return ResponseEntity.noContent().build();
     }
