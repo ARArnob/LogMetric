@@ -12,6 +12,8 @@ interface AuthContextValue {
   loading: boolean;
   login: (token: string, user: AuthUser, persistent?: boolean) => void;
   logout: () => void;
+  /** Re-reads the caller's own record (email/role/organizationName) after a mutation, e.g. an organization rename -- same fetch the background poll already does. */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -72,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token]);
 
   return (
-    <AuthContext.Provider value={{ token, user, loading, login, logout }}>
+    <AuthContext.Provider value={{ token, user, loading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

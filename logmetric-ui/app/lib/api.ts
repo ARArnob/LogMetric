@@ -124,6 +124,8 @@ export interface AuthUser {
   email: string;
   role: string;
   organizationId: number;
+  /** Only populated after a getCurrentUser() refresh (via /auth/me) -- absent for the brief window right after login/signup, until the auth context's background refresh fills it in. */
+  organizationName?: string;
 }
 
 interface StoredAuth {
@@ -336,6 +338,28 @@ export async function resetPassword(email: string, code: string, newPassword: st
     body: JSON.stringify({ email, code, newPassword }),
   });
   return parseJsonResponse<AuthApiResponse>(response);
+}
+
+/** Requires the current password; the caller's existing JWT stays valid until it expires either way -- there's no server-side session revocation. */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/auth/change-password`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<{ message: string }>(response);
+}
+
+/** ADMIN only. Rejects a name already claimed by a different organization. */
+export async function updateOrganizationName(name: string): Promise<{ id: number; name: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/organizations`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name }),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<{ id: number; name: string }>(response);
 }
 
 /** The caller's own record, read fresh from the DB -- used to detect a role change without waiting for re-login. */

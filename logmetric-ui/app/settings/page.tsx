@@ -1,8 +1,10 @@
 "use client";
 
-import { Activity, Building2 } from "lucide-react";
+import { Activity } from "lucide-react";
 import AppShell from "../components/AppShell";
 import ApiKeySection from "../components/settings/ApiKeySection";
+import OrganizationSection from "../components/settings/OrganizationSection";
+import ChangePasswordSection from "../components/settings/ChangePasswordSection";
 import { useAuth, useRequireAuth } from "../lib/auth";
 import { useTheme, THEMES, THEME_META, Theme } from "../lib/theme";
 
@@ -11,19 +13,6 @@ const THEME_PREVIEW: Record<Theme, { bg: string; surface: string; accent: string
   daylight: { bg: "#f6f7f9", surface: "#ffffff", accent: "#0369a1", text: "#0f172a" },
   amber: { bg: "#14100a", surface: "#241d14", accent: "#ffb000", text: "#f5e6c8" },
 };
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: "var(--text-muted)" }}>
-        {label}
-      </div>
-      <div className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-        {value}
-      </div>
-    </div>
-  );
-}
 
 export default function SettingsPage() {
   const { loading } = useRequireAuth();
@@ -47,18 +36,12 @@ export default function SettingsPage() {
   return (
     <AppShell title="Settings" description="Organization details, API keys, and appearance.">
       <div className="flex flex-col gap-4 max-w-2xl">
-        <div className="card p-5 animate-fade-up">
-          <div className="flex items-center gap-2 mb-4">
-            <Building2 className="w-4 h-4" style={{ color: "var(--accent)" }} />
-            <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
-              Organization
-            </h2>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Organization ID" value={String(user?.organizationId ?? "—")} />
-            <Field label="Your role" value={user?.role ?? "—"} />
-            <Field label="Signed in as" value={user?.email ?? "—"} />
-          </div>
+        <div className="animate-fade-up">
+          <OrganizationSection />
+        </div>
+
+        <div className="animate-fade-up">
+          <ChangePasswordSection />
         </div>
 
         <div className="animate-fade-up">

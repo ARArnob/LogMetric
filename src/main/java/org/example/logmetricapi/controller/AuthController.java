@@ -2,6 +2,7 @@ package org.example.logmetricapi.controller;
 
 import jakarta.validation.Valid;
 import org.example.logmetricapi.dto.AuthResponse;
+import org.example.logmetricapi.dto.ChangePasswordRequest;
 import org.example.logmetricapi.dto.CurrentUserResponse;
 import org.example.logmetricapi.dto.ForgotPasswordRequest;
 import org.example.logmetricapi.dto.LoginRequest;
@@ -241,6 +242,27 @@ public class AuthController {
                 user.getRole().name(),
                 user.getOrganization().getId()
         ));
+    }
+
+    /**
+     * ⚠️ Same known limitation as T38's reset-password: JWTs are stateless
+     * with no server-side revocation, so any session issued before this
+     * change stays valid until it expires. Changing your password here does
+     * not evict a session an attacker already holds.
+     */
+    @PostMapping("/change-password")
+    public ResponseEntity<MessageResponse> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        User user = AuthUtils.requireUser(authentication);
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        return ResponseEntity.ok(new MessageResponse("Password changed"));
     }
 
     /**
