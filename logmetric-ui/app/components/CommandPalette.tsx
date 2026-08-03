@@ -28,6 +28,7 @@ import { useAuth } from "../lib/auth";
 import { useTheme, THEMES, THEME_META } from "../lib/theme";
 import { searchLogs } from "../lib/api";
 import { liveTailPausedStore } from "../lib/liveTail";
+import { useServiceAliases } from "../lib/serviceAliases";
 import { commandPaletteOpenStore } from "../lib/commandPaletteStore";
 
 interface Command {
@@ -77,6 +78,7 @@ export default function CommandPalette() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, token, logout } = useAuth();
+  const { resolveServiceName } = useServiceAliases();
   const { theme, setTheme } = useTheme();
   const liveTailPaused = useSyncExternalStore(liveTailPausedStore.subscribe, liveTailPausedStore.get, () => false);
 
@@ -170,7 +172,7 @@ export default function CommandPalette() {
       list.push({
         id: `service-${service}`,
         group: "Jump to service",
-        label: service,
+        label: resolveServiceName(service),
         icon: <Server className="w-4 h-4" />,
         run: () => router.push(`/explorer?services=${encodeURIComponent(service)}`),
       });
@@ -196,7 +198,7 @@ export default function CommandPalette() {
     });
 
     return list;
-  }, [pathname, isAdmin, theme, services, liveTailPaused, router, setTheme, logout]);
+  }, [pathname, isAdmin, theme, services, liveTailPaused, router, setTheme, logout, resolveServiceName]);
 
   const filtered = useMemo(() => {
     if (!query) return commands;

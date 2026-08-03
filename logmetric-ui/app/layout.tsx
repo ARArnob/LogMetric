@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "./lib/auth";
 import { ThemeProvider, themeInitScript } from "./lib/theme";
 import { ToastProvider } from "./lib/toast";
+import { ServiceAliasProvider } from "./lib/serviceAliases";
 import SessionExpiryHandler from "./components/SessionExpiryHandler";
 import BackendDownBanner from "./components/BackendDownBanner";
 
@@ -32,11 +33,13 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col antialiased">
         <ThemeProvider>
           <AuthProvider>
-            <ToastProvider>
-              <BackendDownBanner />
-              <SessionExpiryHandler />
-              {children}
-            </ToastProvider>
+            <ServiceAliasProvider>
+              <ToastProvider>
+                <BackendDownBanner />
+                <SessionExpiryHandler />
+                {children}
+              </ToastProvider>
+            </ServiceAliasProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

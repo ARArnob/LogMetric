@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertCircle, AlertTriangle, Info, Activity, Bug } from "lucide-react";
 import { LogEntry } from "../../lib/api";
 import { severityStyle } from "../../lib/severity";
+import { useServiceAliases } from "../../lib/serviceAliases";
 
 const LEVEL_ICON: Record<string, React.ReactNode> = {
   ERROR: <AlertCircle className="w-3 h-3" />,
@@ -35,6 +36,7 @@ export default function LogTable({
   onRowClick: (log: LogEntry, index: number) => void;
   selectedId?: string | null;
 }) {
+  const { resolveServiceName } = useServiceAliases();
   const rowPad = density === "compact" ? "py-1" : "py-2.5";
   const rowHeight = density === "compact" ? 29 : 41;
 
@@ -148,7 +150,7 @@ export default function LogTable({
                       className={`px-4 ${rowPad} font-semibold whitespace-nowrap`}
                       style={{ color: "var(--accent)", fontSize: 11 }}
                     >
-                      {log.serviceName}
+                      {resolveServiceName(log.serviceName)}
                     </td>
 
                     <td

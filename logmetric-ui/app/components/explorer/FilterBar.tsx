@@ -8,6 +8,7 @@ import TimeRangePicker, { TimeRangeValue } from "../TimeRangePicker";
 import { useMediaQuery } from "../../lib/useMediaQuery";
 import { ServiceBucket, SeverityBucket } from "../../lib/api";
 import { SEVERITY, SEVERITY_ORDER } from "../../lib/severity";
+import { useServiceAliases } from "../../lib/serviceAliases";
 
 export { TIME_PRESETS } from "../TimeRangePicker";
 
@@ -38,6 +39,7 @@ function LevelServiceTimeControls({
   severityCounts: Map<string, number>;
   stacked?: boolean;
 }) {
+  const { resolveServiceName } = useServiceAliases();
   return (
     <>
       <div className={stacked ? "w-full" : "w-full md:w-44"}>
@@ -60,7 +62,7 @@ function LevelServiceTimeControls({
           placeholder="Any service"
           values={services}
           onChange={onServicesChange}
-          options={serviceOptions.map((s) => ({ value: s.name, label: s.name, count: s.count }))}
+          options={serviceOptions.map((s) => ({ value: s.name, label: resolveServiceName(s.name), count: s.count }))}
         />
       </div>
 

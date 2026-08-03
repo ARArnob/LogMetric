@@ -6,6 +6,7 @@ import { generateMockLog, isDemoMode, LogEntry, subscribeToLogStream } from "../
 import { useAuth } from "../lib/auth";
 import { liveTailPausedStore } from "../lib/liveTail";
 import { SEVERITY_ORDER, severityStyle } from "../lib/severity";
+import { useServiceAliases } from "../lib/serviceAliases";
 import LogDetailDrawer from "./explorer/LogDetailDrawer";
 import {
   AlertCircle,
@@ -54,6 +55,7 @@ export default function LogStream({
   onRefresh: () => void;
 }) {
   const { token } = useAuth();
+  const { resolveServiceName } = useServiceAliases();
   const demoView = isDemoMode && !token;
 
   const [logs, setLogs] = useState<LogEntry[]>(logsProp);
@@ -405,7 +407,7 @@ export default function LogStream({
                         rowRefs.current[idx] = el;
                       }}
                       tabIndex={0}
-                      aria-label={`${log.level} log from ${log.serviceName}: ${log.message}. Press Enter for details.`}
+                      aria-label={`${log.level} log from ${resolveServiceName(log.serviceName)}: ${log.message}. Press Enter for details.`}
                       onClick={() => openRow(idx)}
                       onKeyDown={(e) => onRowKeyDown(e, idx)}
                       className={`log-row log-row-enter${isFresh ? " log-row-flash" : ""}`}
@@ -438,7 +440,7 @@ export default function LogStream({
                         className="px-4 py-2.5 font-semibold whitespace-nowrap"
                         style={{ color: "var(--accent)", fontSize: 11 }}
                       >
-                        {log.serviceName}
+                        {resolveServiceName(log.serviceName)}
                       </td>
 
                       <td

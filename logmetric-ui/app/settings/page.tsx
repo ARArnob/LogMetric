@@ -5,6 +5,7 @@ import AppShell from "../components/AppShell";
 import ApiKeySection from "../components/settings/ApiKeySection";
 import OrganizationSection from "../components/settings/OrganizationSection";
 import ChangePasswordSection from "../components/settings/ChangePasswordSection";
+import ServiceAliasSection from "../components/settings/ServiceAliasSection";
 import { useAuth, useRequireAuth } from "../lib/auth";
 import { useTheme, THEMES, THEME_META, Theme } from "../lib/theme";
 
@@ -46,6 +47,10 @@ export default function SettingsPage() {
 
         <div className="animate-fade-up">
           <ApiKeySection isAdmin={user?.role === "ADMIN"} />
+        </div>
+
+        <div className="animate-fade-up">
+          <ServiceAliasSection isAdmin={user?.role === "ADMIN"} />
         </div>
 
         <div className="card p-5 animate-fade-up">

@@ -15,6 +15,7 @@ import { useAuth } from "../lib/auth";
 import { API_BASE_URL, isDemoMode } from "../lib/api";
 import { useLogSearch } from "../lib/useLogSearch";
 import { compactNumber } from "../lib/severity";
+import { useServiceAliases } from "../lib/serviceAliases";
 
 const RANGE_STORAGE_KEY = "logmetric_dashboard_range";
 
@@ -83,6 +84,7 @@ function DashboardContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { token, loading: authLoading } = useAuth();
+  const { resolveServiceName } = useServiceAliases();
   const demoView = isDemoMode && !token;
 
   const [range, setRange] = useState<TimeRangeValue>(() => readInitialRange(searchParams));
@@ -135,10 +137,10 @@ function DashboardContent() {
       items: [...data.serviceNames]
         .sort((a, b) => b.count - a.count)
         .slice(0, 5)
-        .map((s) => ({ key: s.name, label: s.name, count: s.count, href: explorerLink(range, { services: s.name }) })),
+        .map((s) => ({ key: s.name, label: resolveServiceName(s.name), count: s.count, href: explorerLink(range, { services: s.name }) })),
       max: data.serviceNames[0] ? Math.max(...data.serviceNames.map((s) => s.count)) : 1,
     }),
-    [data, range]
+    [data, range, resolveServiceName]
   );
 
   const topPatterns = useMemo(

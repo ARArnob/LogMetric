@@ -472,6 +472,47 @@ export async function createInvite(): Promise<Invite> {
   return parseJsonResponse<Invite>(response);
 }
 
+// ===== Service display aliases (authenticated; write ops ADMIN only) =====
+// There's no Service entity -- rawServiceName is free text on every LogEntry.
+// This is a read-time label lookup only; it never rewrites indexed data.
+
+export interface ServiceAlias {
+  rawServiceName: string;
+  displayName: string;
+}
+
+export async function listServiceAliases(): Promise<ServiceAlias[]> {
+  const response = await apiFetch(`${API_BASE_URL}/service-aliases`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<ServiceAlias[]>(response);
+}
+
+export async function upsertServiceAlias(rawServiceName: string, displayName: string): Promise<ServiceAlias> {
+  const response = await apiFetch(`${API_BASE_URL}/service-aliases`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ rawServiceName, displayName }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<ServiceAlias>(response);
+}
+
+export async function deleteServiceAlias(rawServiceName: string): Promise<void> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/service-aliases?rawServiceName=${encodeURIComponent(rawServiceName)}`,
+    { method: "DELETE", headers: authHeaders(), signal: AbortSignal.timeout(8000) }
+  );
+  if (response.status === 401) signalSessionExpired();
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(response.status, (body && body.message) || "Couldn't remove the alias");
+  }
+}
+
 // ===== Live tail (SSE, authenticated) =====
 
 const SSE_RETRY_BASE_MS = 1000;
