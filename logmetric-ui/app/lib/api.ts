@@ -507,6 +507,38 @@ export async function createInvite(): Promise<Invite> {
   return parseJsonResponse<Invite>(response);
 }
 
+// T36: an invite code is a bearer credential into the org until it expires
+// or is redeemed -- list/revoke so an admin isn't stuck waiting one out.
+export interface InviteListItem {
+  id: number;
+  code: string;
+  createdAt: string;
+  expiresAt: string;
+  used: boolean;
+}
+
+export async function listInvites(): Promise<InviteListItem[]> {
+  const response = await apiFetch(`${API_BASE_URL}/invites`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<InviteListItem[]>(response);
+}
+
+export async function revokeInvite(id: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/invites/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(response.status, (body && body.message) || "Couldn't revoke the invite");
+  }
+}
+
 // ===== Service display aliases (authenticated; write ops ADMIN only) =====
 // There's no Service entity -- rawServiceName is free text on every LogEntry.
 // This is a read-time label lookup only; it never rewrites indexed data.

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Mail, Clock } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Mail, Clock, X } from "lucide-react";
 import CopyButton from "../ui/CopyButton";
-import { ApiError, Invite, createInvite } from "../../lib/api";
+import ConfirmDialog from "../ui/ConfirmDialog";
+import Badge from "../ui/Badge";
+import { ApiError, Invite, InviteListItem, createInvite, listInvites, revokeInvite } from "../../lib/api";
 import { useToast } from "../../lib/toast";
 
 function humanizeExpiry(expiresAt: string): string {
@@ -18,7 +20,23 @@ function humanizeExpiry(expiresAt: string): string {
 export default function InviteCard() {
   const [invite, setInvite] = useState<Invite | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [invites, setInvites] = useState<InviteListItem[]>([]);
+  const [pendingRevoke, setPendingRevoke] = useState<InviteListItem | null>(null);
+  const [revoking, setRevoking] = useState(false);
   const toast = useToast();
+
+  const refreshInvites = useCallback(async () => {
+    try {
+      setInvites(await listInvites());
+    } catch {
+      // Silent -- the generate button above still works even if this list
+      // fails to load; a toast for a background list refresh would be noise.
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshInvites();
+  }, [refreshInvites]);
 
   async function handleInvite() {
     setGenerating(true);
@@ -26,6 +44,7 @@ export default function InviteCard() {
       const created = await createInvite();
       setInvite(created);
       toast.success("Invite link created");
+      refreshInvites();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Couldn't create an invite");
     } finally {
@@ -33,8 +52,24 @@ export default function InviteCard() {
     }
   }
 
+  async function confirmRevoke() {
+    if (!pendingRevoke) return;
+    setRevoking(true);
+    try {
+      await revokeInvite(pendingRevoke.id);
+      setInvites((list) => list.filter((i) => i.id !== pendingRevoke.id));
+      toast.success("Invite revoked");
+      setPendingRevoke(null);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't revoke the invite");
+    } finally {
+      setRevoking(false);
+    }
+  }
+
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const inviteUrl = invite ? `${origin}/signup?invite=${invite.code}` : null;
+  const outstanding = invites.filter((i) => !i.used);
 
   return (
     <div className="card p-5">
@@ -70,6 +105,54 @@ export default function InviteCard() {
           </div>
         </div>
       )}
+
+      {outstanding.length > 0 && (
+        <div className="mt-5 pt-4" style={{ borderTop: "1px solid var(--border-subtle)" }}>
+          <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
+            Outstanding invites
+          </h3>
+          <ul className="flex flex-col gap-1.5">
+            {outstanding.map((i) => (
+              <li
+                key={i.id}
+                className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm"
+                style={{ background: "var(--bg-inset)" }}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <code className="font-mono text-xs truncate" style={{ color: "var(--text-primary)" }}>
+                    {i.code}
+                  </code>
+                  <Badge variant="neutral">{humanizeExpiry(i.expiresAt)}</Badge>
+                </div>
+                <button
+                  className="btn btn-ghost shrink-0"
+                  style={{ fontSize: 12, padding: "4px 8px" }}
+                  onClick={() => setPendingRevoke(i)}
+                  aria-label={`Revoke invite ${i.code}`}
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Revoke
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={!!pendingRevoke}
+        onClose={() => setPendingRevoke(null)}
+        onConfirm={confirmRevoke}
+        loading={revoking}
+        danger
+        title="Revoke this invite?"
+        message={
+          pendingRevoke
+            ? `Anyone who still has "${pendingRevoke.code}" will no longer be able to use it to join this organization.`
+            : ""
+        }
+        confirmLabel="Revoke"
+      />
     </div>
   );
 }
