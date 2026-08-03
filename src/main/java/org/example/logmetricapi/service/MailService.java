@@ -45,7 +45,16 @@ public class MailService {
         message.setTo(recipients.toArray(new String[0]));
         message.setSubject("LogMetric alert: " + ruleName);
         message.setText(detail);
-        mailSender.send(message);
+        
+        try {
+            mailSender.send(message);
+        } catch (org.springframework.mail.MailException e) {
+            System.err.println("\n=== FAILED TO SEND EMAIL (SMTP BLOCKED?) ===");
+            System.err.println("To: " + String.join(", ", recipients));
+            System.err.println("Subject: LogMetric alert: " + ruleName);
+            System.err.println("Detail: " + detail);
+            System.err.println("============================================\n");
+        }
     }
 
     private void send(String to, String subject, String text) {
@@ -54,6 +63,15 @@ public class MailService {
         message.setTo(to);
         message.setSubject(subject);
         message.setText(text);
-        mailSender.send(message);
+        
+        try {
+            mailSender.send(message);
+        } catch (org.springframework.mail.MailException e) {
+            System.err.println("\n=== FAILED TO SEND EMAIL (SMTP BLOCKED?) ===");
+            System.err.println("To: " + to);
+            System.err.println("Subject: " + subject);
+            System.err.println("Body: \n" + text);
+            System.err.println("============================================\n");
+        }
     }
 }
