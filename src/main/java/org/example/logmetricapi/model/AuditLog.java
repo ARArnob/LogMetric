@@ -28,8 +28,12 @@ public class AuditLog {
     @Column(nullable = false)
     private String actorEmail;
 
+    // columnDefinition avoids Hibernate auto-generating a CHECK constraint
+    // enumerating the exact enum values at DDL-creation time -- ddl-auto=update
+    // never widens that constraint when a new AuditAction is added later, and
+    // this table exists specifically to gain new action types over time.
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "varchar(40)")
     private AuditAction action;
 
     @Column(length = 500)

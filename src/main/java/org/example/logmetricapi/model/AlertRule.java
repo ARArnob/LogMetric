@@ -32,8 +32,11 @@ public class AlertRule {
     @Column(nullable = false)
     private String name;
 
+    // columnDefinition avoids Hibernate auto-generating a CHECK constraint
+    // enumerating the exact enum values at DDL-creation time -- ddl-auto=update
+    // never widens that constraint when a new metric is added later.
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "varchar(40)")
     private AlertMetric metric;
 
     @Column(nullable = false)

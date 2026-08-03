@@ -2,15 +2,21 @@ package org.example.logmetricapi.controller;
 
 import org.example.logmetricapi.dto.ApiKeyResponse;
 import org.example.logmetricapi.model.ApiKey;
+import org.example.logmetricapi.model.AuditAction;
 import org.example.logmetricapi.repository.ApiKeyRepository;
+import org.example.logmetricapi.service.AuditLogService;
 import org.example.logmetricapi.util.AuthUtils;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -21,9 +27,11 @@ import java.util.List;
 public class ApiKeyController {
 
     private final ApiKeyRepository apiKeyRepository;
+    private final AuditLogService auditLogService;
 
-    public ApiKeyController(ApiKeyRepository apiKeyRepository) {
+    public ApiKeyController(ApiKeyRepository apiKeyRepository, AuditLogService auditLogService) {
         this.apiKeyRepository = apiKeyRepository;
+        this.auditLogService = auditLogService;
     }
 
     // ADMIN-only, matching key generation's existing gate -- Settings' whole
@@ -38,6 +46,31 @@ public class ApiKeyController {
                 .map(this::toResponse)
                 .toList();
         return ResponseEntity.ok(keys);
+    }
+
+    // Soft revoke, not a row delete -- ApiKeyService.validateKey() already
+    // rejects a revoked key, and keeping the row preserves "who generated
+    // this, when" for the audit trail. This is also what unblocks deleting a
+    // system whose only keys are now revoked (SystemController.deleteSystem).
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('ADMIN')")
+    public ResponseEntity<Void> revokeKey(@PathVariable Long id) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long orgId = AuthUtils.requireOrganizationId(authentication);
+
+        ApiKey apiKey = apiKeyRepository.findByIdAndOrganizationId(id, orgId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Key not found"));
+
+        if (apiKey.isRevoked()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This key is already revoked");
+        }
+
+        apiKey.setRevoked(true);
+        apiKeyRepository.save(apiKey);
+        auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
+                AuditAction.KEY_REVOKED, apiKey.getKeyPrefix() + "…");
+
+        return ResponseEntity.noContent().build();
     }
 
     private ApiKeyResponse toResponse(ApiKey apiKey) {

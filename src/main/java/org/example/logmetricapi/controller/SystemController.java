@@ -6,6 +6,7 @@ import org.example.logmetricapi.dto.SystemResponse;
 import org.example.logmetricapi.model.AuditAction;
 import org.example.logmetricapi.model.Organization;
 import org.example.logmetricapi.model.SystemEntity;
+import org.example.logmetricapi.repository.ApiKeyRepository;
 import org.example.logmetricapi.repository.OrganizationRepository;
 import org.example.logmetricapi.repository.SystemRepository;
 import org.example.logmetricapi.service.ApiKeyService;
@@ -16,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -30,15 +32,18 @@ public class SystemController {
 
     private final SystemRepository systemRepository;
     private final OrganizationRepository organizationRepository;
+    private final ApiKeyRepository apiKeyRepository;
     private final ApiKeyService apiKeyService;
     private final AuditLogService auditLogService;
 
     public SystemController(SystemRepository systemRepository,
                               OrganizationRepository organizationRepository,
+                              ApiKeyRepository apiKeyRepository,
                               ApiKeyService apiKeyService,
                               AuditLogService auditLogService) {
         this.systemRepository = systemRepository;
         this.organizationRepository = organizationRepository;
+        this.apiKeyRepository = apiKeyRepository;
         this.apiKeyService = apiKeyService;
         this.auditLogService = auditLogService;
     }
@@ -79,12 +84,24 @@ public class SystemController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('ADMIN')")
+    @Transactional
     public ResponseEntity<Void> deleteSystem(@PathVariable Long id) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Long orgId = AuthUtils.requireOrganizationId(authentication);
 
         SystemEntity system = systemRepository.findByIdAndOrganizationId(id, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "System not found"));
+
+        long activeKeyCount = apiKeyRepository.countBySystemIdAndRevokedFalse(id);
+        if (activeKeyCount > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This system has " + activeKeyCount + " active API key(s) -- revoke them first");
+        }
+        // Any keys left at this point are already revoked and can never
+        // authenticate again -- clear them out so their FK reference doesn't
+        // block deleting the system itself.
+        apiKeyRepository.deleteBySystemId(id);
+
         systemRepository.delete(system);
         auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
                 AuditAction.SYSTEM_DELETED, system.getName());

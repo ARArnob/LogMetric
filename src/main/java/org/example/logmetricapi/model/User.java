@@ -22,7 +22,12 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private String password;
 
+    // columnDefinition avoids Hibernate auto-generating a CHECK constraint
+    // enumerating the exact enum values at DDL-creation time -- ddl-auto=update
+    // never widens that constraint when a new Role is added later, so it
+    // would otherwise reject every login the moment the enum grows.
     @Enumerated(EnumType.STRING)
+    @Column(columnDefinition = "varchar(40)")
     private Role role;
 
     // Phase 2 requirement: Relationship with Organization

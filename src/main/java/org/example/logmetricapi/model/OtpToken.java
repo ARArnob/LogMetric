@@ -25,8 +25,11 @@ public class OtpToken {
     @Column(nullable = false)
     private String codeHash;
 
+    // columnDefinition avoids Hibernate auto-generating a CHECK constraint
+    // enumerating the exact enum values at DDL-creation time -- ddl-auto=update
+    // never widens that constraint when a new purpose is added later.
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "varchar(40)")
     private OtpPurpose purpose;
 
     @Column(nullable = false)
