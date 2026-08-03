@@ -107,7 +107,9 @@ public class SecurityConfig {
                 // Named explicitly rather than a "/api/auth/**" wildcard so that
                 // adding an authenticated endpoint under /api/auth (e.g. /me)
                 // doesn't silently become public by inheriting this permitAll.
-                .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/register-with-invite", "/api/auth/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/register-with-invite", "/api/auth/login",
+                        "/api/auth/verify-email", "/api/auth/resend-verification",
+                        "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(handling -> handling

@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, AlertTriangle, Info, Activity, Bug } from "lucide-react";
 import { LogEntry } from "../../lib/api";
 import { severityStyle } from "../../lib/severity";
+import { useServiceAliases } from "../../lib/serviceAliases";
 
 const LEVEL_ICON: Record<string, React.ReactNode> = {
   ERROR: <AlertCircle className="w-3 h-3" />,
@@ -11,6 +13,13 @@ const LEVEL_ICON: Record<string, React.ReactNode> = {
   INFO: <Info className="w-3 h-3" />,
   DEBUG: <Bug className="w-3 h-3" />,
 };
+
+// Above this many rows, render only what's near the viewport instead of the
+// whole table -- a plain (unvirtualized) 1,000-row table visibly drops
+// scroll framerate. Disabled under `wrap` since wrapped messages make row
+// height variable, which a fixed-row-height windowing scheme can't track.
+const VIRTUALIZE_THRESHOLD = 200;
+const OVERSCAN_ROWS = 12;
 
 export default function LogTable({
   logs,
@@ -27,10 +36,38 @@ export default function LogTable({
   onRowClick: (log: LogEntry, index: number) => void;
   selectedId?: string | null;
 }) {
+  const { resolveServiceName } = useServiceAliases();
   const rowPad = density === "compact" ? "py-1" : "py-2.5";
+  const rowHeight = density === "compact" ? 29 : 41;
+
+  const virtualize = !wrap && logs.length > VIRTUALIZE_THRESHOLD;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportH, setViewportH] = useState(600);
+
+  useEffect(() => {
+    if (!virtualize) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    setViewportH(el.clientHeight);
+    setScrollTop(el.scrollTop);
+  }, [virtualize]);
+
+  const startIdx = virtualize ? Math.max(0, Math.floor(scrollTop / rowHeight) - OVERSCAN_ROWS) : 0;
+  const endIdx = virtualize
+    ? Math.min(logs.length, Math.ceil((scrollTop + viewportH) / rowHeight) + OVERSCAN_ROWS)
+    : logs.length;
+  const visibleLogs = virtualize ? logs.slice(startIdx, endIdx) : logs;
+  const topSpacer = virtualize ? startIdx * rowHeight : 0;
+  const bottomSpacer = virtualize ? (logs.length - endIdx) * rowHeight : 0;
 
   return (
-    <div className="overflow-x-auto">
+    <div
+      ref={scrollRef}
+      onScroll={virtualize ? (e) => setScrollTop(e.currentTarget.scrollTop) : undefined}
+      className="overflow-x-auto"
+      style={virtualize ? { maxHeight: "70vh", overflowY: "auto" } : undefined}
+    >
       <table className="w-full text-left text-xs" style={{ borderCollapse: "collapse" }}>
         <thead className="sticky top-0" style={{ background: "var(--bg-elevated)", zIndex: 10 }}>
           <tr>
@@ -56,7 +93,15 @@ export default function LogTable({
                   ))}
                 </tr>
               ))
-            : logs.map((log, idx) => {
+            : (
+              <>
+                {topSpacer > 0 && (
+                  <tr aria-hidden="true" style={{ height: topSpacer }}>
+                    <td colSpan={5} style={{ padding: 0, border: 0 }} />
+                  </tr>
+                )}
+                {visibleLogs.map((log, i) => {
+                const idx = startIdx + i;
                 const cfg = severityStyle(log.level);
                 const ts = new Date(log.timestamp);
                 const selected = selectedId === log.id;
@@ -105,7 +150,7 @@ export default function LogTable({
                       className={`px-4 ${rowPad} font-semibold whitespace-nowrap`}
                       style={{ color: "var(--accent)", fontSize: 11 }}
                     >
-                      {log.serviceName}
+                      {resolveServiceName(log.serviceName)}
                     </td>
 
                     <td
@@ -136,7 +181,14 @@ export default function LogTable({
                     </td>
                   </tr>
                 );
-              })}
+                })}
+                {bottomSpacer > 0 && (
+                  <tr aria-hidden="true" style={{ height: bottomSpacer }}>
+                    <td colSpan={5} style={{ padding: 0, border: 0 }} />
+                  </tr>
+                )}
+              </>
+            )}
         </tbody>
       </table>
     </div>

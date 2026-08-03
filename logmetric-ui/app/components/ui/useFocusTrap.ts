@@ -26,6 +26,19 @@ export function useFocusTrap<T extends HTMLElement>(active: boolean, onClose: ()
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        // A nested open combobox/listbox (Select, MultiSelect) should have
+        // Escape dismissed by its own popup, not close the whole dialog.
+        // Checking e.target's focus isn't reliable here: clicking an option
+        // in a MultiSelect (which stays open across multiple picks, unlike
+        // Select) blurs the trigger button, since the dropdown's <li> items
+        // aren't focusable -- so a DOM query for the open-popup marker both
+        // components already set (aria-haspopup="listbox" + aria-expanded)
+        // is used instead of relying on where focus currently is. Without
+        // this, this listener's capture-phase stopPropagation() fires
+        // before the popup's own (bubble-phase) Escape handler ever could.
+        if (document.querySelector('[aria-haspopup="listbox"][aria-expanded="true"]')) {
+          return;
+        }
         e.stopPropagation();
         onClose();
         return;

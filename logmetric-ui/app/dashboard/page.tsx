@@ -6,15 +6,16 @@ import Link from "next/link";
 import { Activity, AlertCircle, AlertTriangle, ArrowRight, GitBranch, Key, Layers, Server } from "lucide-react";
 import AppShell from "../components/AppShell";
 import LogStream from "../components/LogStream";
-import StatTile from "../components/charts/StatTile";
+import StatTile, { StatTrend } from "../components/charts/StatTile";
 import SeverityBar from "../components/charts/SeverityBar";
 import VolumeHistogram from "../components/charts/VolumeHistogram";
 import CopyButton from "../components/ui/CopyButton";
 import TimeRangePicker, { TimeRangeValue, presetRange } from "../components/TimeRangePicker";
 import { useAuth } from "../lib/auth";
-import { API_BASE_URL, isDemoMode } from "../lib/api";
+import { API_BASE_URL, isDemoMode, searchLogs } from "../lib/api";
 import { useLogSearch } from "../lib/useLogSearch";
 import { compactNumber } from "../lib/severity";
+import { useServiceAliases } from "../lib/serviceAliases";
 
 const RANGE_STORAGE_KEY = "logmetric_dashboard_range";
 
@@ -83,6 +84,7 @@ function DashboardContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { token, loading: authLoading } = useAuth();
+  const { resolveServiceName } = useServiceAliases();
   const demoView = isDemoMode && !token;
 
   const [range, setRange] = useState<TimeRangeValue>(() => readInitialRange(searchParams));
@@ -113,6 +115,41 @@ function DashboardContent() {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
+  // ---- Error-rate trend: current window vs. the immediately preceding one
+  // of the same length. Only meaningful when the window has a concrete
+  // length -- "all time" has no preceding window to compare against, so the
+  // indicator is omitted entirely rather than estimated (F15 spec).
+  const [previousWindowStats, setPreviousWindowStats] = useState<{ total: number; errors: number } | null>(null);
+
+  useEffect(() => {
+    if (range.id === "all" || range.startDate == null) {
+      setPreviousWindowStats(null);
+      return;
+    }
+    const currentStart = range.startDate;
+    const currentEnd = range.endDate ?? Date.now();
+    const windowMs = currentEnd - currentStart;
+    if (windowMs <= 0) {
+      setPreviousWindowStats(null);
+      return;
+    }
+    let cancelled = false;
+    // size:1, not 0 -- PageRequest.of(page, 0) throws on the backend; only
+    // the aggregations are read here, never the one returned log entry.
+    searchLogs({ startDate: currentStart - windowMs, endDate: currentStart, size: 1 })
+      .then((result) => {
+        if (cancelled) return;
+        const errors = result.severityDistribution.find((d) => d.level.toUpperCase() === "ERROR")?.count ?? 0;
+        setPreviousWindowStats({ total: result.total, errors });
+      })
+      .catch(() => {
+        if (!cancelled) setPreviousWindowStats(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range.id, range.startDate, range.endDate]);
+
   // ---- Stats derived from real response data (never hardcoded) ----
   const stats = useMemo(() => {
     const errors = data.severityDistribution.find((d) => d.level.toUpperCase() === "ERROR")?.count ?? 0;
@@ -129,6 +166,48 @@ function DashboardContent() {
       spark: data.histogram.slice(-14).map((b) => b.count),
     };
   }, [data]);
+
+  const errorRateTrend = useMemo((): StatTrend | undefined => {
+    if (!previousWindowStats || previousWindowStats.total === 0) return undefined;
+    const previousErrorRate = (previousWindowStats.errors / previousWindowStats.total) * 100;
+    const delta = stats.errorRate - previousErrorRate;
+    if (Math.abs(delta) < 0.005) {
+      return { direction: "flat", text: "flat vs previous period", tone: "neutral" };
+    }
+    return {
+      direction: delta > 0 ? "up" : "down",
+      text: `${delta > 0 ? "+" : ""}${delta.toFixed(2)}pp vs previous period`,
+      tone: delta > 0 ? "bad" : "good",
+    };
+  }, [previousWindowStats, stats.errorRate]);
+
+  const topServices = useMemo(
+    () => ({
+      items: [...data.serviceNames]
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+        .map((s) => ({ key: s.name, label: resolveServiceName(s.name), count: s.count, href: explorerLink(range, { services: s.name }) })),
+      max: data.serviceNames[0] ? Math.max(...data.serviceNames.map((s) => s.count)) : 1,
+    }),
+    [data, range, resolveServiceName]
+  );
+
+  const topPatterns = useMemo(
+    () => ({
+      items: [...data.patternClusters]
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+        .map((p) => ({
+          key: p.patternHash,
+          label: p.sampleMessage || p.patternHash.slice(0, 12),
+          count: p.count,
+          href: `/patterns?hash=${encodeURIComponent(p.patternHash)}`,
+          icon: <GitBranch className="w-3 h-3 shrink-0" style={{ color: "var(--text-muted)" }} />,
+        })),
+      max: data.patternClusters[0] ? Math.max(...data.patternClusters.map((p) => p.count)) : 1,
+    }),
+    [data, range]
+  );
 
   if (authLoading || (!token && !isDemoMode)) {
     return (
@@ -201,6 +280,7 @@ function DashboardContent() {
                   icon={<AlertCircle className="w-3.5 h-3.5" />}
                   accent="var(--sev-error-text)"
                   accentDim="var(--sev-error-dim)"
+                  trend={errorRateTrend}
                   loading={loading}
                 />
               </Link>
@@ -277,15 +357,7 @@ function DashboardContent() {
               ) : data.serviceNames.length === 0 ? (
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>No services reporting in this window.</p>
               ) : (
-                <TopList
-                  items={[...data.serviceNames].sort((a, b) => b.count - a.count).slice(0, 5).map((s) => ({
-                    key: s.name,
-                    label: s.name,
-                    count: s.count,
-                    href: explorerLink(range, { services: s.name }),
-                  }))}
-                  max={data.serviceNames[0] ? Math.max(...data.serviceNames.map((s) => s.count)) : 1}
-                />
+                <TopList items={topServices.items} max={topServices.max} />
               )}
             </div>
 
@@ -298,19 +370,7 @@ function DashboardContent() {
               ) : data.patternClusters.length === 0 ? (
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>No pattern clusters in this window.</p>
               ) : (
-                <TopList
-                  items={[...data.patternClusters]
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 5)
-                    .map((p) => ({
-                      key: p.patternHash,
-                      label: p.sampleMessage || p.patternHash.slice(0, 12),
-                      count: p.count,
-                      href: `/patterns?hash=${encodeURIComponent(p.patternHash)}`,
-                      icon: <GitBranch className="w-3 h-3 shrink-0" style={{ color: "var(--text-muted)" }} />,
-                    }))}
-                  max={data.patternClusters[0] ? Math.max(...data.patternClusters.map((p) => p.count)) : 1}
-                />
+                <TopList items={topPatterns.items} max={topPatterns.max} />
               )}
             </div>
           </div>
@@ -390,6 +450,9 @@ function FirstRunOnboarding() {
         </p>
       </div>
       <pre
+        tabIndex={0}
+        role="region"
+        aria-label="Example curl command"
         className="text-xs font-mono p-3 rounded-lg overflow-x-auto whitespace-pre text-left w-full"
         style={{ background: "var(--bg-inset)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
       >

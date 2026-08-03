@@ -8,9 +8,11 @@ import {
   LayoutDashboard,
   ScrollText,
   GitBranch,
+  Network,
   BellRing,
   Settings,
   Users,
+  History,
   LogOut,
   Menu,
   Search,
@@ -32,9 +34,11 @@ const NAV: NavItem[] = [
   { href: "/dashboard", label: "Live Telemetry", icon: LayoutDashboard },
   { href: "/explorer", label: "Log Explorer", icon: ScrollText },
   { href: "/patterns", label: "Pattern Clusters", icon: GitBranch },
+  { href: "/topology", label: "Topology", icon: Network },
   { href: "/alerts", label: "Alerts", icon: BellRing },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/team", label: "Team", icon: Users, adminOnly: true },
+  { href: "/audit", label: "Audit Log", icon: History, adminOnly: true },
 ];
 
 export default function AppShell({
@@ -195,7 +199,7 @@ export default function AppShell({
             </button>
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full pulse-live shrink-0" style={{ background: "var(--ok)" }} />
-              <span className="text-xs font-semibold" style={{ color: "var(--ok)" }}>
+              <span className="text-xs font-semibold" style={{ color: "var(--ok-text)" }}>
                 Connected
               </span>
             </div>

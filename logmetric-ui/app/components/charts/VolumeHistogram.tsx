@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SEVERITY, SEVERITY_ORDER, Severity, compactNumber } from "../../lib/severity";
 
 export interface HistogramBucket {
@@ -15,6 +15,41 @@ const INTERVAL_LABEL: Record<string, string> = {
   day: "events / day",
   week: "events / week",
 };
+
+// Below this rendered width per slot, bars stop reading as bars and start
+// reading as speckled noise -- merge buckets instead of letting them shrink.
+const MIN_SLOT_PX = 14;
+
+/** Merges consecutive buckets into `groupSize`-wide groups, summing counts and levels. */
+function downsample(buckets: HistogramBucket[], groupSize: number): HistogramBucket[] {
+  if (groupSize <= 1) return buckets;
+  const merged: HistogramBucket[] = [];
+  for (let i = 0; i < buckets.length; i += groupSize) {
+    const group = buckets.slice(i, i + groupSize);
+    const levels: Record<string, number> = {};
+    for (const b of group) {
+      for (const [k, v] of Object.entries(b.levels ?? {})) levels[k] = (levels[k] ?? 0) + v;
+    }
+    merged.push({
+      timestamp: group[0].timestamp,
+      count: group.reduce((n, b) => n + b.count, 0),
+      levels,
+    });
+  }
+  return merged;
+}
+
+/** Human label for a merged bucket span, since a fixed interval string no longer describes it once buckets are merged for legibility. */
+function spanLabel(ms: number): string {
+  const min = ms / 60_000;
+  if (min < 90) return min <= 1.5 ? "events / minute" : `events / ${Math.round(min)} min`;
+  const hr = ms / 3_600_000;
+  if (hr < 36) return hr <= 1.5 ? "events / hour" : `events / ${Math.round(hr)} hr`;
+  const day = ms / 86_400_000;
+  if (day < 10) return day <= 1.5 ? "events / day" : `events / ${Math.round(day)} d`;
+  const week = ms / (7 * 86_400_000);
+  return week <= 1.5 ? "events / week" : `events / ${Math.round(week)} wk`;
+}
 
 /**
  * Volume over time, stacked by severity. Columns capped at 24px with a 2px
@@ -39,21 +74,39 @@ export default function VolumeHistogram({
   const [dragEnd, setDragEnd] = useState<number | null>(null);
   const dragging = dragStart !== null;
 
+  const plotRef = useRef<HTMLDivElement>(null);
+  const [plotWidth, setPlotWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    const el = plotRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => setPlotWidth(entries[0].contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Below MIN_SLOT_PX per bar, bars stop reading as bars -- merge buckets
+  // rather than let them shrink into invisible slivers on narrow screens.
+  const groupSize =
+    plotWidth && buckets.length > 0 ? Math.max(1, Math.ceil(buckets.length / Math.max(1, Math.floor(plotWidth / MIN_SLOT_PX)))) : 1;
+  const displayBuckets = useMemo(() => downsample(buckets, groupSize), [buckets, groupSize]);
+  const merged = groupSize > 1;
+
   useEffect(() => {
     if (!dragging) return;
     function onMouseUp() {
       if (dragStart !== null && dragEnd !== null && dragStart !== dragEnd && onBrush) {
         const lo = Math.min(dragStart, dragEnd);
         const hi = Math.max(dragStart, dragEnd);
-        const bucketMs = buckets.length > 1 ? buckets[1].timestamp - buckets[0].timestamp : 3_600_000;
-        onBrush(buckets[lo].timestamp, buckets[hi].timestamp + bucketMs);
+        const bucketMs = displayBuckets.length > 1 ? displayBuckets[1].timestamp - displayBuckets[0].timestamp : 3_600_000;
+        onBrush(displayBuckets[lo].timestamp, displayBuckets[hi].timestamp + bucketMs);
       }
       setDragStart(null);
       setDragEnd(null);
     }
     document.addEventListener("mouseup", onMouseUp);
     return () => document.removeEventListener("mouseup", onMouseUp);
-  }, [dragging, dragStart, dragEnd, buckets, onBrush]);
+  }, [dragging, dragStart, dragEnd, displayBuckets, onBrush]);
 
   if (!buckets.length) {
     return (
@@ -68,12 +121,13 @@ export default function VolumeHistogram({
     );
   }
 
-  const max = Math.max(...buckets.map((b) => b.count), 1);
+  const max = Math.max(...displayBuckets.map((b) => b.count), 1);
   // Round the axis top to something clean rather than the raw max.
   const step = Math.pow(10, Math.floor(Math.log10(max)));
   const axisTop = Math.ceil(max / step) * step;
 
-  const active = hover !== null ? buckets[hover] : null;
+  const active = hover !== null ? displayBuckets[hover] : null;
+  const mergedSpanMs = merged && displayBuckets.length > 1 ? displayBuckets[1].timestamp - displayBuckets[0].timestamp : null;
 
   return (
     <div className="relative">
@@ -83,12 +137,13 @@ export default function VolumeHistogram({
           {compactNumber(axisTop)}
         </span>
         <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-          {INTERVAL_LABEL[interval] ?? `events / ${interval}`}
+          {mergedSpanMs ? spanLabel(mergedSpanMs) : (INTERVAL_LABEL[interval] ?? `events / ${interval}`)}
         </span>
       </div>
 
       {/* Plot */}
       <div
+        ref={plotRef}
         className="relative flex items-end"
         style={{
           height,
@@ -110,8 +165,8 @@ export default function VolumeHistogram({
           <div
             className="absolute top-0 bottom-0 pointer-events-none"
             style={{
-              left: `${(Math.min(dragStart!, dragEnd) / buckets.length) * 100}%`,
-              width: `${((Math.abs(dragEnd - dragStart!) + 1) / buckets.length) * 100}%`,
+              left: `${(Math.min(dragStart!, dragEnd) / displayBuckets.length) * 100}%`,
+              width: `${((Math.abs(dragEnd - dragStart!) + 1) / displayBuckets.length) * 100}%`,
               background: "var(--accent-dim)",
               border: "1px solid var(--accent)",
               zIndex: 5,
@@ -119,7 +174,7 @@ export default function VolumeHistogram({
           />
         )}
 
-        {buckets.map((b, i) => {
+        {displayBuckets.map((b, i) => {
           const isHover = hover === i;
           const totalH = (b.count / axisTop) * height;
           const levels = b.levels ?? {};
@@ -183,10 +238,10 @@ export default function VolumeHistogram({
       {/* Time range footer */}
       <div className="flex justify-between mt-1.5">
         <span className="text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>
-          {fmt(buckets[0].timestamp)}
+          {fmt(displayBuckets[0].timestamp)}
         </span>
         <span className="text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>
-          {fmt(buckets[buckets.length - 1].timestamp)}
+          {fmt(displayBuckets[displayBuckets.length - 1].timestamp)}
         </span>
       </div>
 

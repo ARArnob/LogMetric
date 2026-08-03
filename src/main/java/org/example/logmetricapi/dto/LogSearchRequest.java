@@ -12,6 +12,7 @@ public class LogSearchRequest {
     private int size = 50;
 
     private String systemId;
+    private String patternHash;
 
     public String getSystemId() {
         return systemId;
@@ -19,6 +20,14 @@ public class LogSearchRequest {
 
     public void setSystemId(String systemId) {
         this.systemId = systemId;
+    }
+
+    public String getPatternHash() {
+        return patternHash;
+    }
+
+    public void setPatternHash(String patternHash) {
+        this.patternHash = patternHash;
     }
 
     public String getKeyword() { return keyword; }

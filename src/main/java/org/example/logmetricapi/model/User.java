@@ -22,13 +22,28 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private String password;
 
+    // columnDefinition avoids Hibernate auto-generating a CHECK constraint
+    // enumerating the exact enum values at DDL-creation time -- ddl-auto=update
+    // never widens that constraint when a new Role is added later, so it
+    // would otherwise reject every login the moment the enum grows.
     @Enumerated(EnumType.STRING)
+    @Column(columnDefinition = "varchar(40)")
     private Role role;
 
     // Phase 2 requirement: Relationship with Organization
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "organization_id")
     private Organization organization;
+
+    // T37: gates login (see isEnabled()) until the signup OTP is confirmed.
+    // columnDefinition spells out an explicit DEFAULT so Hibernate's ddl-auto=update
+    // can ALTER TABLE this in on top of an existing, already-populated `users` table --
+    // plain `nullable=false` with no default makes Postgres reject that ALTER outright
+    // once any row exists (it did, the hard way, against a pre-existing local dev DB).
+    // Existing rows backfill to false, i.e. "not verified yet, go through OTP" -- the
+    // safe default, and one the resend-verification flow already handles for free.
+    @Column(nullable = false, columnDefinition = "boolean not null default false")
+    private boolean emailVerified = false;
 
     // --- Constructors ---
     public User() {
@@ -58,6 +73,9 @@ public class User implements UserDetails {
     public Organization getOrganization() { return organization; }
     public void setOrganization(Organization organization) { this.organization = organization; }
 
+    public boolean isEmailVerified() { return emailVerified; }
+    public void setEmailVerified(boolean emailVerified) { this.emailVerified = emailVerified; }
+
     // --- UserDetails Methods ---
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
@@ -84,8 +102,11 @@ public class User implements UserDetails {
         return true;
     }
 
+    // T37: DaoAuthenticationProvider checks this before verifying the
+    // password, so an unverified account fails login with a distinct
+    // DisabledException instead of a generic bad-credentials error.
     @Override
     public boolean isEnabled() {
-        return true;
+        return emailVerified;
     }
 }

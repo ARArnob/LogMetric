@@ -29,7 +29,9 @@
 
   --text-primary: #e8edf5;
   --text-secondary: #94a3b8;
-  --text-muted: #5a6980;
+  /* Was #5a6980 -- 2.6:1 against --bg-overlay (its hardest surface),
+     well under the 4.5:1 floor. This clears 5.2:1 there. */
+  --text-muted: #8c9bb0;
 
   --grid-line: rgba(255, 255, 255, 0.07);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.28);
@@ -61,14 +63,16 @@
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-muted: #7c8899;
+  /* Was #7c8899 -- 3.6:1 against white (its hardest surface), under the
+     4.5:1 floor. This clears 5.3:1 there. */
+  --text-muted: #606d7f;
 
   --grid-line: rgba(15, 23, 42, 0.08);
   --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
   --shadow-lift: 0 2px 4px rgba(15, 23, 42, 0.08), 0 16px 40px rgba(15, 23, 42, 0.10);
 
-  --hero-glow-1: rgba(3, 105, 161, 0.10);
-  --hero-glow-2: rgba(139, 92, 246, 0.08);
+  --hero-glow-1: rgba(3, 105, 161, 0.16);
+  --hero-glow-2: rgba(139, 92, 246, 0.13);
   --grid-overlay: rgba(15, 23, 42, 0.06);
 
   /* On white, the mark colors are too light to read as text -- amber in
@@ -80,6 +84,9 @@
   --sev-warn-text: #a35f00;
   --sev-info-text: #1d63c4;
   --sev-debug-text: #63615d;
+  /* --ok as text (e.g. AppShell's "Connected" status) measured 3.35:1 on
+     white -- same fix as the severity marks above. Clears 5.5:1. */
+  --ok-text: #087a08;
 }
 
 :root[data-theme="amber"] {
@@ -103,7 +110,9 @@
 
   --text-primary: #f5e6c8;
   --text-secondary: #b8a582;
-  --text-muted: #7d6f57;
+  /* Was #7d6f57 -- 3.1:1 against --bg-overlay (its hardest surface),
+     under the 4.5:1 floor. This clears 4.9:1 there. */
+  --text-muted: #a19071;
 
   --grid-line: rgba(255, 176, 0, 0.09);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.35);
@@ -142,6 +151,11 @@
 
   --ok: #0ca30c;
   --ok-dim: rgba(12, 163, 12, 0.14);
+  /* Same split as the severity marks above: --ok is the validated fill
+     color, --ok-text is for when it's rendered as text. Dark surfaces:
+     identical. Daylight overrides below -- --ok alone measured 3.35:1 on
+     white. */
+  --ok-text: var(--ok);
 
   --radius-sm: 6px;
   --radius: 10px;
@@ -263,47 +277,61 @@ input[type="search"]:focus {
 
 input::placeholder { color: var(--text-muted); }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border-radius: var(--radius);
-  font-weight: 600;
-  font-size: 14px;
-  padding: 10px 18px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  text-decoration: none;
-  transition: transform 0.12s ease, background-color 0.15s, border-color 0.15s, opacity 0.15s;
-}
-.btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+/*
+ * @layer components -- NOT decorative. Tailwind's utilities (including
+ * responsive display ones like lg:hidden) live in @layer utilities, and CSS
+ * cascade layers give ANY unlayered rule priority over ANY layered rule
+ * regardless of specificity or source order. .btn sets `display`, so left
+ * unlayered it permanently wins over lg:hidden/md:hidden/etc, meaning an
+ * element like `className="lg:hidden btn btn-quiet"` never actually hides
+ * at the lg breakpoint -- confirmed live: AppShell's mobile nav toggle was
+ * rendered and keyboard-focusable at 1280px desktop width. Wrapping the
+ * whole button component here (not just .btn itself) so utility overrides
+ * work correctly and consistently everywhere .btn is used.
+ */
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 18px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform 0.12s ease, background-color 0.15s, border-color 0.15s, opacity 0.15s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-.btn-primary {
-  background: var(--accent);
-  color: var(--accent-contrast);
-}
-.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 
-.btn-ghost {
-  background: var(--bg-elevated);
-  border-color: var(--border-default);
-  color: var(--text-primary);
-}
-.btn-ghost:hover:not(:disabled) {
-  border-color: var(--border-strong);
-  background: var(--bg-overlay);
-}
+  .btn-ghost {
+    background: var(--bg-elevated);
+    border-color: var(--border-default);
+    color: var(--text-primary);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    background: var(--bg-overlay);
+  }
 
-.btn-quiet {
-  background: transparent;
-  color: var(--text-secondary);
-  border-color: transparent;
-}
-.btn-quiet:hover:not(:disabled) {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
+  .btn-quiet {
+    background: transparent;
+    color: var(--text-secondary);
+    border-color: transparent;
+  }
+  .btn-quiet:hover:not(:disabled) {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+  }
 }
 
 /* ============================================================
@@ -351,6 +379,14 @@ input::placeholder { color: var(--text-muted); }
   to { opacity: 1; transform: translateY(0); }
 }
 .log-row-enter { animation: slideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+@keyframes pipelineFlow {
+  0% { left: -2px; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+.pipeline-flow-dot { position: absolute; left: -2px; animation: pipelineFlow 1.8s ease-in-out infinite; }
 
 .log-row { cursor: pointer; }
 .log-row:hover, .log-row:focus-within { background: var(--bg-elevated); }
@@ -409,6 +445,14 @@ input::placeholder { color: var(--text-muted); }
   to { transform: translateX(0); }
 }
 .drawer-enter { animation: drawerIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Bottom sheet -- Drawer's mobile presentation (F19). Slides up instead of
+   in from the right, since there's no room for a side panel on a phone. */
+@keyframes sheetIn {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.sheet-enter { animation: sheetIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 /* ============================================================
    SCROLLBAR

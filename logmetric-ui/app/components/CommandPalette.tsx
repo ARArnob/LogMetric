@@ -7,9 +7,11 @@ import {
   LayoutDashboard,
   ScrollText,
   GitBranch,
+  Network,
   BellRing,
   Settings,
   Users,
+  History,
   LogOut,
   Sun,
   Moon,
@@ -28,6 +30,7 @@ import { useAuth } from "../lib/auth";
 import { useTheme, THEMES, THEME_META } from "../lib/theme";
 import { searchLogs } from "../lib/api";
 import { liveTailPausedStore } from "../lib/liveTail";
+import { useServiceAliases } from "../lib/serviceAliases";
 import { commandPaletteOpenStore } from "../lib/commandPaletteStore";
 
 interface Command {
@@ -42,9 +45,11 @@ const NAV_PAGES: { href: string; label: string; icon: ReactNode; adminOnly?: boo
   { href: "/dashboard", label: "Live Telemetry", icon: <LayoutDashboard className="w-4 h-4" /> },
   { href: "/explorer", label: "Log Explorer", icon: <ScrollText className="w-4 h-4" /> },
   { href: "/patterns", label: "Pattern Clusters", icon: <GitBranch className="w-4 h-4" /> },
+  { href: "/topology", label: "Topology", icon: <Network className="w-4 h-4" /> },
   { href: "/alerts", label: "Alerts", icon: <BellRing className="w-4 h-4" /> },
   { href: "/settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
   { href: "/team", label: "Team", icon: <Users className="w-4 h-4" />, adminOnly: true },
+  { href: "/audit", label: "Audit Log", icon: <History className="w-4 h-4" />, adminOnly: true },
 ];
 
 const LEVELS: { level: string; icon: ReactNode }[] = [
@@ -77,6 +82,7 @@ export default function CommandPalette() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, token, logout } = useAuth();
+  const { resolveServiceName } = useServiceAliases();
   const { theme, setTheme } = useTheme();
   const liveTailPaused = useSyncExternalStore(liveTailPausedStore.subscribe, liveTailPausedStore.get, () => false);
 
@@ -170,7 +176,7 @@ export default function CommandPalette() {
       list.push({
         id: `service-${service}`,
         group: "Jump to service",
-        label: service,
+        label: resolveServiceName(service),
         icon: <Server className="w-4 h-4" />,
         run: () => router.push(`/explorer?services=${encodeURIComponent(service)}`),
       });
@@ -196,7 +202,7 @@ export default function CommandPalette() {
     });
 
     return list;
-  }, [pathname, isAdmin, theme, services, liveTailPaused, router, setTheme, logout]);
+  }, [pathname, isAdmin, theme, services, liveTailPaused, router, setTheme, logout, resolveServiceName]);
 
   const filtered = useMemo(() => {
     if (!query) return commands;

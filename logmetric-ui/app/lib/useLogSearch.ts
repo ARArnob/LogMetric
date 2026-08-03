@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   ApiError,
   HistogramBucket,
@@ -94,7 +93,6 @@ export function useLogSearch(
   options: { pollMs?: number } = {}
 ): UseLogSearchResult {
   const { pollMs = 20000 } = options;
-  const router = useRouter();
   const { token, loading: authLoading } = useAuth();
   const demoView = isDemoMode && !token;
 
@@ -136,7 +134,8 @@ export function useLogSearch(
       } catch (err) {
         if (controller.signal.aborted) return;
         if (err instanceof ApiError && err.status === 401) {
-          router.replace("/signin");
+          // searchLogs() already signaled the global session-expiry flow
+          // (logout + toast + redirect) -- nothing more to do here.
           return;
         }
         setError(err instanceof Error ? err.message : "Failed to fetch logs");
@@ -147,7 +146,7 @@ export function useLogSearch(
         }
       }
     },
-    [demoView, token, router]
+    [demoView, token]
   );
 
   const setFilters = useCallback(

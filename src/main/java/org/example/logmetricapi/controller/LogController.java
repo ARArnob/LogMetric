@@ -42,6 +42,10 @@ public class LogController {
     public ResponseEntity<String> ingestLog(@RequestBody LogEntry log) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         log.setOrganizationId(AuthUtils.requireOrganizationIdAsString(authentication));
+        // Overwrite whatever systemId the client sent -- it must come from the
+        // authenticated API-key principal, never the request body (T11).
+        Long systemId = AuthUtils.requireSystemId(authentication);
+        log.setSystemId(systemId != null ? String.valueOf(systemId) : null);
 
         System.out.println(log);
         rabbitTemplate.convertAndSend("log.queue", log);

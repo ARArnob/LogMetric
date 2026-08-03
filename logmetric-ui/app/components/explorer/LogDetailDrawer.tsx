@@ -7,6 +7,7 @@ import Drawer from "../ui/Drawer";
 import CopyButton from "../ui/CopyButton";
 import { LogEntry } from "../../lib/api";
 import { severityStyle } from "../../lib/severity";
+import { useServiceAliases } from "../../lib/serviceAliases";
 
 const LEVEL_ICON: Record<string, React.ReactNode> = {
   ERROR: <AlertCircle className="w-3.5 h-3.5" />,
@@ -60,6 +61,8 @@ export default function LogDetailDrawer({
   hasPrev?: boolean;
   hasNext?: boolean;
 }) {
+  const { resolveServiceName } = useServiceAliases();
+
   useEffect(() => {
     if (!log || !onNavigate) return;
     function onKeyDown(e: KeyboardEvent) {
@@ -95,7 +98,7 @@ export default function LogDetailDrawer({
               {log.level}
             </span>
             <span className="text-sm font-semibold" style={{ color: "var(--accent)" }}>
-              {log.serviceName}
+              {resolveServiceName(log.serviceName)}
             </span>
           </div>
           {onNavigate && (

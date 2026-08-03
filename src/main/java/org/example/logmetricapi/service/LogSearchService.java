@@ -43,6 +43,9 @@ public class LogSearchService {
         if (request.getSystemId() != null && !request.getSystemId().trim().isEmpty()) {
             boolQueryBuilder.filter(f -> f.term(t -> t.field("systemId").value(request.getSystemId())));
         }
+        if (request.getPatternHash() != null && !request.getPatternHash().trim().isEmpty()) {
+            boolQueryBuilder.filter(f -> f.term(t -> t.field("patternHash").value(request.getPatternHash())));
+        }
         if (request.getStartDate() != null || request.getEndDate() != null) {
             boolQueryBuilder.filter(f -> f.range(r -> r.untyped(u -> {
                 u.field("timestamp");

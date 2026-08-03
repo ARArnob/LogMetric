@@ -3,9 +3,11 @@ package org.example.logmetricapi.controller;
 import jakarta.validation.Valid;
 import org.example.logmetricapi.dto.UpdateRoleRequest;
 import org.example.logmetricapi.dto.UserResponse;
+import org.example.logmetricapi.model.AuditAction;
 import org.example.logmetricapi.model.Role;
 import org.example.logmetricapi.model.User;
 import org.example.logmetricapi.repository.UserRepository;
+import org.example.logmetricapi.service.AuditLogService;
 import org.example.logmetricapi.util.AuthUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,9 +25,11 @@ import java.util.stream.Collectors;
 public class UserController {
 
     private final UserRepository userRepository;
+    private final AuditLogService auditLogService;
 
-    public UserController(UserRepository userRepository) {
+    public UserController(UserRepository userRepository, AuditLogService auditLogService) {
         this.userRepository = userRepository;
+        this.auditLogService = auditLogService;
     }
 
     @GetMapping
@@ -63,8 +67,11 @@ public class UserController {
             }
         }
 
+        Role previousRole = targetUser.getRole();
         targetUser.setRole(request.getRole());
         userRepository.save(targetUser);
+        auditLogService.record(orgId, caller.getEmail(), AuditAction.ROLE_CHANGED,
+                targetUser.getEmail() + ": " + previousRole + " -> " + targetUser.getRole());
 
         return ResponseEntity.ok(new UserResponse(targetUser.getId(), targetUser.getEmail(), targetUser.getRole().name()));
     }

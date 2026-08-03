@@ -8,6 +8,7 @@ import LogTable from "../explorer/LogTable";
 import LogDetailDrawer from "../explorer/LogDetailDrawer";
 import EmptyState from "../ui/EmptyState";
 import { useLogSearch } from "../../lib/useLogSearch";
+import { useServiceAliases } from "../../lib/serviceAliases";
 
 /**
  * Everything here comes from one search filtered to a single patternHash --
@@ -16,6 +17,7 @@ import { useLogSearch } from "../../lib/useLogSearch";
  */
 export default function ClusterDetail({ hash, onBack }: { hash: string; onBack: () => void }) {
   const { data, loading } = useLogSearch({ patternHash: hash, size: 50 }, { pollMs: 0 });
+  const { resolveServiceName } = useServiceAliases();
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const selectedLog = selectedIndex != null ? (data.logs[selectedIndex] ?? null) : null;
 
@@ -89,7 +91,7 @@ export default function ClusterDetail({ hash, onBack }: { hash: string; onBack: 
               className="text-xs font-semibold px-2.5 py-1 rounded-full"
               style={{ background: "var(--accent-dim)", color: "var(--accent)" }}
             >
-              {s.name} <span style={{ color: "var(--text-muted)" }}>· {s.count}</span>
+              {resolveServiceName(s.name)} <span style={{ color: "var(--text-muted)" }}>· {s.count}</span>
             </span>
           ))}
         </div>

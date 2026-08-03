@@ -2,12 +2,14 @@
 
 import { PatternCluster } from "../../lib/api";
 import { SEVERITY, SEVERITY_ORDER, compactNumber } from "../../lib/severity";
+import { useServiceAliases } from "../../lib/serviceAliases";
 
 /**
  * A cluster is a group, not a log line -- the headline number is the event
  * count across every service it touched, not a single representative row.
  */
 export default function ClusterCard({ cluster, onClick }: { cluster: PatternCluster; onClick: () => void }) {
+  const { resolveServiceName } = useServiceAliases();
   const segments = SEVERITY_ORDER.map((lvl) => ({ lvl, count: cluster.levels[lvl] ?? 0 })).filter((s) => s.count > 0);
   const segmentTotal = segments.reduce((sum, s) => sum + s.count, 0) || cluster.count;
 
@@ -51,7 +53,7 @@ export default function ClusterCard({ cluster, onClick }: { cluster: PatternClus
       <div className="flex items-center justify-between gap-2 mt-auto">
         {cluster.dominantService ? (
           <span className="text-xs font-semibold truncate" style={{ color: "var(--accent)" }}>
-            {cluster.dominantService}
+            {resolveServiceName(cluster.dominantService)}
           </span>
         ) : (
           <span />

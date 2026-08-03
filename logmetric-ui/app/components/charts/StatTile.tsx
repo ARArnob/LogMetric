@@ -1,6 +1,14 @@
 "use client";
 
 import { ReactNode } from "react";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+
+export interface StatTrend {
+  direction: "up" | "down" | "flat";
+  text: string;
+  /** Whether this direction is a good or bad thing for this particular metric -- "up" isn't always bad (e.g. active services), so the tile can't infer color from direction alone. */
+  tone: "good" | "bad" | "neutral";
+}
 
 /**
  * Stat tile contract: label (sentence case) + value + optional sub + optional
@@ -15,6 +23,7 @@ export default function StatTile({
   accent = "var(--accent)",
   accentDim = "var(--accent-dim)",
   spark,
+  trend,
   loading = false,
 }: {
   label: string;
@@ -24,6 +33,7 @@ export default function StatTile({
   accent?: string;
   accentDim?: string;
   spark?: number[];
+  trend?: StatTrend;
   loading?: boolean;
 }) {
   // A flat sparkline reads as a stray rule, not a chart -- only draw it when
@@ -61,6 +71,28 @@ export default function StatTile({
           {sub && (
             <div className="text-xs" style={{ color: "var(--text-muted)" }}>
               {sub}
+            </div>
+          )}
+          {trend && (
+            <div
+              className="flex items-center gap-1 text-xs font-semibold mt-1"
+              style={{
+                color:
+                  trend.tone === "bad"
+                    ? "var(--sev-error-text)"
+                    : trend.tone === "good"
+                      ? "var(--ok-text)"
+                      : "var(--text-muted)",
+              }}
+            >
+              {trend.direction === "up" ? (
+                <TrendingUp className="w-3 h-3" />
+              ) : trend.direction === "down" ? (
+                <TrendingDown className="w-3 h-3" />
+              ) : (
+                <Minus className="w-3 h-3" />
+              )}
+              {trend.text}
             </div>
           )}
         </>

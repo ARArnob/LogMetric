@@ -30,7 +30,7 @@ const ICON: Record<ToastType, typeof CheckCircle2> = {
 };
 
 const ACCENT: Record<ToastType, { color: string; dim: string }> = {
-  success: { color: "var(--ok)", dim: "var(--ok-dim)" },
+  success: { color: "var(--ok-text)", dim: "var(--ok-dim)" },
   error: { color: "var(--sev-error-text)", dim: "var(--sev-error-dim)" },
   info: { color: "var(--sev-info-text)", dim: "var(--sev-info-dim)" },
 };

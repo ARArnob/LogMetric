@@ -2,8 +2,10 @@ package org.example.logmetricapi.service;
 
 import org.example.logmetricapi.model.Organization;
 import org.example.logmetricapi.model.Role;
+import org.example.logmetricapi.model.SystemEntity;
 import org.example.logmetricapi.model.User;
 import org.example.logmetricapi.repository.OrganizationRepository;
+import org.example.logmetricapi.repository.SystemRepository;
 import org.example.logmetricapi.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
@@ -18,6 +20,7 @@ import java.time.Instant;
 @Profile("!prod")
 public class DatabaseSeeder implements CommandLineRunner {
     private final OrganizationRepository organizationRepository;
+    private final SystemRepository systemRepository;
     private final UserRepository userRepository;
     private final ApiKeyService apiKeyService;
     private final PasswordEncoder passwordEncoder;
@@ -26,10 +29,12 @@ public class DatabaseSeeder implements CommandLineRunner {
     private String seedAdminPassword;
 
     public DatabaseSeeder(OrganizationRepository organizationRepository,
+                           SystemRepository systemRepository,
                            UserRepository userRepository,
                            ApiKeyService apiKeyService,
                            PasswordEncoder passwordEncoder) {
         this.organizationRepository = organizationRepository;
+        this.systemRepository = systemRepository;
         this.userRepository = userRepository;
         this.apiKeyService = apiKeyService;
         this.passwordEncoder = passwordEncoder;
@@ -48,9 +53,18 @@ public class DatabaseSeeder implements CommandLineRunner {
             admin.setPassword(passwordEncoder.encode(seedAdminPassword));
             admin.setRole(Role.ADMIN);
             admin.setOrganization(org);
+            // Seeded for local dev convenience -- skip the OTP round-trip so the
+            // printed credentials below are immediately usable (T37).
+            admin.setEmailVerified(true);
             userRepository.save(admin);
 
-            String apiKey = apiKeyService.generateKey(org);
+            SystemEntity defaultSystem = new SystemEntity();
+            defaultSystem.setName("Default System");
+            defaultSystem.setOrganization(org);
+            defaultSystem.setCreatedAt(Timestamp.from(Instant.now()));
+            defaultSystem = systemRepository.save(defaultSystem);
+
+            String apiKey = apiKeyService.generateKey(defaultSystem);
 
             System.out.println(">>> SEEDED ADMIN LOGIN: admin@logmetric.local / " + seedAdminPassword);
             System.out.println(">>> SEEDED API KEY: " + apiKey);

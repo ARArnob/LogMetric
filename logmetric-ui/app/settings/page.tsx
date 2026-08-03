@@ -1,8 +1,14 @@
 "use client";
 
-import { Activity, Building2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Activity } from "lucide-react";
 import AppShell from "../components/AppShell";
 import ApiKeySection from "../components/settings/ApiKeySection";
+import SystemSection from "../components/settings/SystemSection";
+import OrganizationSection from "../components/settings/OrganizationSection";
+import ChangePasswordSection from "../components/settings/ChangePasswordSection";
+import ServiceAliasSection from "../components/settings/ServiceAliasSection";
+import { SystemInfo, listSystems } from "../lib/api";
 import { useAuth, useRequireAuth } from "../lib/auth";
 import { useTheme, THEMES, THEME_META, Theme } from "../lib/theme";
 
@@ -12,23 +18,29 @@ const THEME_PREVIEW: Record<Theme, { bg: string; surface: string; accent: string
   amber: { bg: "#14100a", surface: "#241d14", accent: "#ffb000", text: "#f5e6c8" },
 };
 
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: "var(--text-muted)" }}>
-        {label}
-      </div>
-      <div className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
 export default function SettingsPage() {
   const { loading } = useRequireAuth();
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const [systems, setSystems] = useState<SystemInfo[]>([]);
+  const [systemsLoading, setSystemsLoading] = useState(true);
+
+  // Lifted here (rather than fetched independently by each section) so
+  // creating a system in SystemSection is immediately reflected in
+  // ApiKeySection's picker, without a page reload.
+  const refreshSystems = useCallback(async () => {
+    try {
+      setSystems(await listSystems());
+    } catch {
+      // Silent -- same reasoning as the sections' own background refreshes.
+    } finally {
+      setSystemsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshSystems();
+  }, [refreshSystems]);
 
   if (loading) {
     return (
@@ -47,22 +59,29 @@ export default function SettingsPage() {
   return (
     <AppShell title="Settings" description="Organization details, API keys, and appearance.">
       <div className="flex flex-col gap-4 max-w-2xl">
-        <div className="card p-5 animate-fade-up">
-          <div className="flex items-center gap-2 mb-4">
-            <Building2 className="w-4 h-4" style={{ color: "var(--accent)" }} />
-            <h2 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
-              Organization
-            </h2>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Organization ID" value={String(user?.organizationId ?? "—")} />
-            <Field label="Your role" value={user?.role ?? "—"} />
-            <Field label="Signed in as" value={user?.email ?? "—"} />
-          </div>
+        <div className="animate-fade-up">
+          <OrganizationSection />
         </div>
 
         <div className="animate-fade-up">
-          <ApiKeySection isAdmin={user?.role === "ADMIN"} />
+          <ChangePasswordSection />
+        </div>
+
+        <div className="animate-fade-up">
+          <SystemSection
+            isAdmin={user?.role === "ADMIN"}
+            systems={systems}
+            loading={systemsLoading}
+            onRefresh={refreshSystems}
+          />
+        </div>
+
+        <div className="animate-fade-up">
+          <ApiKeySection isAdmin={user?.role === "ADMIN"} systems={systems} />
+        </div>
+
+        <div className="animate-fade-up">
+          <ServiceAliasSection isAdmin={user?.role === "ADMIN"} />
         </div>
 
         <div className="card p-5 animate-fade-up">

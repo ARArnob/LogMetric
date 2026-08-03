@@ -6,7 +6,6 @@ import Link from "next/link";
 import { AlertCircle, ArrowRight, Loader2, UserPlus } from "lucide-react";
 import AuthLayout from "../components/AuthLayout";
 import { ApiError, ValidationError, register as registerApi, registerWithInvite } from "../lib/api";
-import { useAuth } from "../lib/auth";
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
@@ -20,7 +19,6 @@ function FieldError({ message }: { message?: string }) {
 function SignUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login } = useAuth();
 
   const [joinMode, setJoinMode] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
@@ -50,12 +48,7 @@ function SignUpContent() {
       const result = joinMode
         ? await registerWithInvite(email, password, inviteCode)
         : await registerApi(email, password, organizationName);
-      login(result.token, {
-        email: result.email,
-        role: result.role,
-        organizationId: result.organizationId,
-      });
-      router.push("/dashboard");
+      router.push(`/verify-email?email=${encodeURIComponent(result.email)}`);
     } catch (err) {
       if (err instanceof ValidationError) {
         setFieldErrors(err.fields);
@@ -247,8 +240,8 @@ function SignUpContent() {
 
         <p className="text-[11px] text-center leading-relaxed" style={{ color: "var(--text-muted)" }}>
           By signing up you agree to our{" "}
-          <a href="#" style={{ color: "var(--accent)" }}>Terms</a> and{" "}
-          <a href="#" style={{ color: "var(--accent)" }}>Privacy Policy</a>.
+          <Link href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "underline" }}>Terms</Link> and{" "}
+          <Link href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "underline" }}>Privacy Policy</Link>.
         </p>
       </form>
     </AuthLayout>

@@ -6,6 +6,7 @@ import { generateMockLog, isDemoMode, LogEntry, subscribeToLogStream } from "../
 import { useAuth } from "../lib/auth";
 import { liveTailPausedStore } from "../lib/liveTail";
 import { SEVERITY_ORDER, severityStyle } from "../lib/severity";
+import { useServiceAliases } from "../lib/serviceAliases";
 import LogDetailDrawer from "./explorer/LogDetailDrawer";
 import {
   AlertCircle,
@@ -31,6 +32,10 @@ const LEVEL_ICON: Record<string, React.ReactNode> = {
 
 const SCROLL_TOP_THRESHOLD = 24;
 const FLASH_MS = 1100;
+// The live tail is a rolling window, not an archive -- Explorer is the tool
+// for anything older. Kept as one named constant so the cap logic and the
+// footer's disclosure of it can never drift apart.
+const RETENTION_CAP = 200;
 
 /**
  * Presentational live-tail view. Its `logs` come from the caller (dashboard
@@ -50,6 +55,7 @@ export default function LogStream({
   onRefresh: () => void;
 }) {
   const { token } = useAuth();
+  const { resolveServiceName } = useServiceAliases();
   const demoView = isDemoMode && !token;
 
   const [logs, setLogs] = useState<LogEntry[]>(logsProp);
@@ -82,7 +88,7 @@ export default function LogStream({
     const flushed = bufferRef.current;
     bufferRef.current = [];
     setBufferedCount(0);
-    setLogs((prev) => [...flushed, ...prev].slice(0, 200));
+    setLogs((prev) => [...flushed, ...prev].slice(0, RETENTION_CAP));
     markFresh(flushed.map((l) => l.id));
   }
 
@@ -99,11 +105,11 @@ export default function LogStream({
 
   function receiveLog(log: LogEntry) {
     if (pausedRef.current || !atTopRef.current) {
-      bufferRef.current = [log, ...bufferRef.current].slice(0, 199);
+      bufferRef.current = [log, ...bufferRef.current].slice(0, RETENTION_CAP - 1);
       setBufferedCount(bufferRef.current.length);
       return;
     }
-    setLogs((prev) => [log, ...prev.slice(0, 199)]);
+    setLogs((prev) => [log, ...prev.slice(0, RETENTION_CAP - 1)]);
     markFresh([log.id]);
   }
 
@@ -303,10 +309,10 @@ export default function LogStream({
             {paused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
             {paused ? "Resume" : "Pause"}
           </button>
-          <button onClick={onRefresh} className="btn btn-ghost" style={{ padding: 7 }} title="Refresh">
+          <button onClick={onRefresh} className="btn btn-ghost" style={{ padding: 7 }} title="Refresh" aria-label="Refresh">
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
-          <button onClick={exportCsv} className="btn btn-ghost" style={{ padding: 7 }} title="Export CSV">
+          <button onClick={exportCsv} className="btn btn-ghost" style={{ padding: 7 }} title="Export CSV" aria-label="Export CSV">
             <Download className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -401,7 +407,7 @@ export default function LogStream({
                         rowRefs.current[idx] = el;
                       }}
                       tabIndex={0}
-                      aria-label={`${log.level} log from ${log.serviceName}: ${log.message}. Press Enter for details.`}
+                      aria-label={`${log.level} log from ${resolveServiceName(log.serviceName)}: ${log.message}. Press Enter for details.`}
                       onClick={() => openRow(idx)}
                       onKeyDown={(e) => onRowKeyDown(e, idx)}
                       className={`log-row log-row-enter${isFresh ? " log-row-flash" : ""}`}
@@ -434,7 +440,7 @@ export default function LogStream({
                         className="px-4 py-2.5 font-semibold whitespace-nowrap"
                         style={{ color: "var(--accent)", fontSize: 11 }}
                       >
-                        {log.serviceName}
+                        {resolveServiceName(log.serviceName)}
                       </td>
 
                       <td
@@ -486,6 +492,14 @@ export default function LogStream({
             {logs.length}
           </span>{" "}
           events
+          {logs.length >= RETENTION_CAP && (
+            <>
+              {" "}
+              <span title={`The live tail keeps only the newest ${RETENTION_CAP} events -- use Explorer to search further back.`}>
+                · capped at {RETENTION_CAP}
+              </span>
+            </>
+          )}
         </span>
         <span className="font-mono" style={{ fontSize: 10 }}>
           {paused ? (
@@ -493,7 +507,7 @@ export default function LogStream({
               ❚❚ paused{bufferedCount > 0 ? ` · ${bufferedCount} event${bufferedCount === 1 ? "" : "s"} buffered` : ""}
             </span>
           ) : (
-            <span style={{ color: "var(--ok)" }}>● streaming</span>
+            <span style={{ color: "var(--ok-text)" }}>● streaming</span>
           )}
         </span>
       </div>

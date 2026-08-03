@@ -38,6 +38,17 @@ services:
     volumes:
       - es_data:/usr/share/elasticsearch/data
 
+  # 4. Mail catcher (MailHog)
+  # Catches all outbound mail in local dev instead of actually delivering it --
+  # inspect what was "sent" at http://localhost:8025. Point spring.mail.* at a
+  # real SMTP provider via env vars in any real deployment.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: logmetric-mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+
 volumes:
   postgres_data:
   es_data:

@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.logmetricapi.model.LogEntry;
 import org.example.logmetricapi.service.SseService;
+import org.example.logmetricapi.support.FakeMailConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -39,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(FakeMailConfig.class)
 class TenantIsolationAndRbacTests {
 
     @Autowired
@@ -123,10 +126,12 @@ class TenantIsolationAndRbacTests {
     @Test
     void adminOnlyEndpoints_rejectUserRole() throws Exception {
         RegisteredUser admin = registerNewOrg();
+        long systemId = createSystem(admin.token());
         String inviteCode = createInvite(admin.token());
         RegisteredUser member = joinOrgAsUser(inviteCode);
 
-        assertStatus(post("/api/keys/generate"), member.token(), 403);
+        assertStatus(post("/api/systems/" + systemId + "/keys"), member.token(), 403);
+        assertStatus(get("/api/keys"), member.token(), 403);
         assertStatus(get("/api/users"), member.token(), 403);
         assertStatus(post("/api/invites"), member.token(), 403);
         // authorization is denied before the target id is even looked up, so an
@@ -142,8 +147,10 @@ class TenantIsolationAndRbacTests {
     @Test
     void adminOnlyEndpoints_allowAdminRole() throws Exception {
         RegisteredUser admin = registerNewOrg();
+        long systemId = createSystem(admin.token());
 
-        assertStatus(post("/api/keys/generate"), admin.token(), 200);
+        assertStatus(post("/api/systems/" + systemId + "/keys"), admin.token(), 200);
+        assertStatus(get("/api/keys"), admin.token(), 200);
         assertStatus(get("/api/users"), admin.token(), 200);
         assertStatus(post("/api/invites"), admin.token(), 200);
     }
@@ -152,7 +159,37 @@ class TenantIsolationAndRbacTests {
     void adminOnlyEndpoints_rejectMissingAuthentication() throws Exception {
         mockMvc.perform(get("/api/users")).andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/invites")).andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/keys/generate")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/systems/1/keys")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/keys")).andExpect(status().isUnauthorized());
+    }
+
+    // B5 (UI-PLAN.md): GET /api/keys lists key metadata, org-scoped, and never
+    // leaks the raw key -- only the same 8-char prefix already shown once at
+    // generation time.
+    @Test
+    void apiKeyList_isOrgScopedAndNeverExposesTheRawKey() throws Exception {
+        RegisteredUser orgA = registerNewOrg();
+        long systemId = createSystem(orgA.token());
+        MvcResult genResult = mockMvc.perform(post("/api/systems/" + systemId + "/keys")
+                        .header("Authorization", "Bearer " + orgA.token()))
+                .andReturn();
+        assertThat(genResult.getResponse().getStatus()).isEqualTo(200);
+        String rawKey = objectMapper.readTree(genResult.getResponse().getContentAsString()).get("apiKey").asText();
+
+        MvcResult listResult = mockMvc.perform(get("/api/keys").header("Authorization", "Bearer " + orgA.token()))
+                .andReturn();
+        assertThat(listResult.getResponse().getStatus()).isEqualTo(200);
+        JsonNode keys = objectMapper.readTree(listResult.getResponse().getContentAsString());
+        assertThat(keys).hasSize(1);
+        assertThat(keys.get(0).get("maskedHint").asText()).isEqualTo(rawKey.substring(0, 8) + "…");
+        assertThat(listResult.getResponse().getContentAsString()).doesNotContain(rawKey);
+        assertThat(keys.get(0).get("systemId").asLong()).isEqualTo(systemId);
+        assertThat(keys.get(0).get("revoked").asBoolean()).isFalse();
+
+        RegisteredUser orgB = registerNewOrg();
+        MvcResult listResultB = mockMvc.perform(get("/api/keys").header("Authorization", "Bearer " + orgB.token()))
+                .andReturn();
+        assertThat(objectMapper.readTree(listResultB.getResponse().getContentAsString())).isEmpty();
     }
 
     // ===== helpers =====
@@ -162,8 +199,9 @@ class TenantIsolationAndRbacTests {
 
     private RegisteredUser registerNewOrg() throws Exception {
         String suffix = UUID.randomUUID().toString();
+        String email = "t35-admin-" + suffix + "@test.local";
         Map<String, String> body = Map.of(
-                "email", "t35-admin-" + suffix + "@test.local",
+                "email", email,
                 "password", "password123",
                 "organizationName", "T35-Org-" + suffix
         );
@@ -172,8 +210,17 @@ class TenantIsolationAndRbacTests {
                         .content(objectMapper.writeValueAsString(body)))
                 .andReturn();
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
-        JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
-        return new RegisteredUser(json.get("token").asText(), json.get("organizationId").asLong());
+        return verifyEmail(email);
+    }
+
+    private long createSystem(String adminToken) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/systems")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"t35-system\"}"))
+                .andReturn();
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
     }
 
     private String createInvite(String adminToken) throws Exception {
@@ -184,12 +231,28 @@ class TenantIsolationAndRbacTests {
     }
 
     private RegisteredUser joinOrgAsUser(String inviteCode) throws Exception {
+        String email = "t35-member-" + UUID.randomUUID() + "@test.local";
         Map<String, String> body = Map.of(
-                "email", "t35-member-" + UUID.randomUUID() + "@test.local",
+                "email", email,
                 "password", "password123",
                 "inviteCode", inviteCode
         );
         MvcResult result = mockMvc.perform(post("/api/auth/register-with-invite")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andReturn();
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        return verifyEmail(email);
+    }
+
+    // T37: register/register-with-invite no longer return a token directly --
+    // both now require confirming the emailed OTP first (see FakeMailConfig).
+    private RegisteredUser verifyEmail(String email) throws Exception {
+        String code = FakeMailConfig.lastCodeSentTo(email);
+        assertThat(code).as("expected a verification code to have been emailed to " + email).isNotNull();
+
+        Map<String, String> body = Map.of("email", email, "code", code);
+        MvcResult result = mockMvc.perform(post("/api/auth/verify-email")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andReturn();

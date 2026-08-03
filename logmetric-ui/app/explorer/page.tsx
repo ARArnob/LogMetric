@@ -12,7 +12,7 @@ import EmptyState from "../components/ui/EmptyState";
 import Pagination from "../components/ui/Pagination";
 import { TIME_PRESETS, TimeRangeValue, presetRange } from "../components/TimeRangePicker";
 import { useRequireAuth } from "../lib/auth";
-import { LogEntry, LogSearchRequest } from "../lib/api";
+import { LogEntry, LogSearchRequest, SystemInfo, listSystems } from "../lib/api";
 import { useLogSearch } from "../lib/useLogSearch";
 
 const DENSITY_KEY = "logmetric_explorer_density";
@@ -31,6 +31,7 @@ function parseParams(params: URLSearchParams): { filters: LogSearchRequest; time
       levels: params.get("levels") ? params.get("levels")!.split(",") : undefined,
       serviceNames: params.get("services") ? params.get("services")!.split(",") : undefined,
       patternHash: params.get("patternHash") || undefined,
+      systemId: params.get("systemId") || undefined,
       page: params.get("page") ? Number(params.get("page")) : 0,
       size: params.get("size") ? Number(params.get("size")) : DEFAULT_SIZE,
       ...customRange,
@@ -45,6 +46,7 @@ function toParams(filters: LogSearchRequest, timeRangeId: string): URLSearchPara
   if (filters.levels?.length) params.set("levels", filters.levels.join(","));
   if (filters.serviceNames?.length) params.set("services", filters.serviceNames.join(","));
   if (filters.patternHash) params.set("patternHash", filters.patternHash);
+  if (filters.systemId) params.set("systemId", filters.systemId);
   if (timeRangeId !== "all") params.set("range", timeRangeId);
   if (timeRangeId === "custom") {
     if (filters.startDate) params.set("start", String(filters.startDate));
@@ -90,10 +92,15 @@ function ExplorerContent() {
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
   const [wrap, setWrap] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  // Only fetched to resolve a systemId filter chip's label (e.g. a "View in
+  // Explorer" link from /topology) -- Explorer's own search never needed
+  // system names before this.
+  const [systems, setSystems] = useState<SystemInfo[]>([]);
 
   useEffect(() => {
     setDensity((localStorage.getItem(DENSITY_KEY) as "comfortable" | "compact") || "comfortable");
     setWrap(localStorage.getItem(WRAP_KEY) === "true");
+    listSystems().then(setSystems).catch(() => {});
   }, []);
 
   // Explorer is investigative, not a live feed -- no background poll that
@@ -172,12 +179,20 @@ function ExplorerContent() {
         onRemove: () => setFilters({ patternHash: undefined, page: 0 }),
       });
     }
+    if (filters.systemId) {
+      const system = systems.find((s) => String(s.id) === filters.systemId);
+      chips.push({
+        key: "system",
+        label: system ? system.name : `system #${filters.systemId}`,
+        onRemove: () => setFilters({ systemId: undefined, page: 0 }),
+      });
+    }
     if (timeRangeId !== "all") {
       const preset = TIME_PRESETS.find((p) => p.id === timeRangeId);
       chips.push({ key: "range", label: preset?.label ?? "Custom range", onRemove: () => handleTimeRangeChange({ id: "all" }) });
     }
     return chips;
-  }, [filters, timeRangeId, setFilters, handleTimeRangeChange]);
+  }, [filters, timeRangeId, setFilters, handleTimeRangeChange, systems]);
 
   function clearAll() {
     setTimeRangeId("all");
@@ -186,6 +201,7 @@ function ExplorerContent() {
       levels: undefined,
       serviceNames: undefined,
       patternHash: undefined,
+      systemId: undefined,
       startDate: undefined,
       endDate: undefined,
       page: 0,
