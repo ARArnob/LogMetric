@@ -405,6 +405,38 @@ export async function searchLogs(
   return normalizeSearchResponse(body);
 }
 
+// ===== Systems (authenticated; write ops ADMIN only) =====
+// A key is now scoped to a System, not directly to the org (PLAN.md T9-T12).
+// There's no system-picker UI yet -- generateApiKey() below transparently
+// uses the org's first system, creating one if the org somehow has none.
+
+export interface SystemInfo {
+  id: number;
+  name: string;
+  organizationId: number;
+  createdAt: string;
+}
+
+export async function listSystems(): Promise<SystemInfo[]> {
+  const response = await apiFetch(`${API_BASE_URL}/systems`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<SystemInfo[]>(response);
+}
+
+export async function createSystem(name: string): Promise<SystemInfo> {
+  const response = await apiFetch(`${API_BASE_URL}/systems`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<SystemInfo>(response);
+}
+
 // ===== API keys (authenticated, ADMIN only) =====
 
 /**
@@ -418,7 +450,10 @@ export async function generateApiKey(): Promise<string> {
     throw new ApiError(401, "Not authenticated");
   }
 
-  const response = await apiFetch(`${API_BASE_URL}/keys/generate`, {
+  const systems = await listSystems();
+  const system = systems[0] ?? (await createSystem("Default System"));
+
+  const response = await apiFetch(`${API_BASE_URL}/systems/${system.id}/keys`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(8000),

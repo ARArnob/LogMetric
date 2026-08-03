@@ -1,6 +1,6 @@
 package org.example.logmetricapi.util;
 
-import org.example.logmetricapi.model.Organization;
+import org.example.logmetricapi.model.ApiKeyPrincipal;
 import org.example.logmetricapi.model.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -14,7 +14,7 @@ public final class AuthUtils {
 
     /**
      * Resolves the organization id of the authenticated principal (either a
-     * JWT-authenticated User or an API-key-authenticated Organization).
+     * JWT-authenticated User or an API-key-authenticated ApiKeyPrincipal).
      * Throws 401 instead of falling back to a default — every log read/write
      * path must be scoped to a real, authenticated organization.
      */
@@ -24,8 +24,8 @@ public final class AuthUtils {
             if (principal instanceof User user && user.getOrganization() != null) {
                 return user.getOrganization().getId();
             }
-            if (principal instanceof Organization organization) {
-                return organization.getId();
+            if (principal instanceof ApiKeyPrincipal apiKeyPrincipal) {
+                return apiKeyPrincipal.organizationId();
             }
         }
         throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve organization for authenticated request");
@@ -33,6 +33,19 @@ public final class AuthUtils {
 
     public static String requireOrganizationIdAsString(Authentication authentication) {
         return String.valueOf(requireOrganizationId(authentication));
+    }
+
+    /**
+     * Resolves the system id of an API-key-authenticated principal. Only
+     * meaningful on the API-key auth path (POST /api/logs) -- JWT-authenticated
+     * requests have no associated system, since a User isn't scoped to one.
+     * Overwrites whatever systemId a client tried to attribute a log to (T11).
+     */
+    public static Long requireSystemId(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof ApiKeyPrincipal apiKeyPrincipal) {
+            return apiKeyPrincipal.systemId();
+        }
+        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unable to resolve system for authenticated request");
     }
 
     /**

@@ -16,8 +16,10 @@ import org.example.logmetricapi.dto.VerifyEmailRequest;
 import org.example.logmetricapi.model.Organization;
 import org.example.logmetricapi.model.OtpPurpose;
 import org.example.logmetricapi.model.Role;
+import org.example.logmetricapi.model.SystemEntity;
 import org.example.logmetricapi.model.User;
 import org.example.logmetricapi.repository.OrganizationRepository;
+import org.example.logmetricapi.repository.SystemRepository;
 import org.example.logmetricapi.repository.UserRepository;
 import org.example.logmetricapi.service.InviteService;
 import org.example.logmetricapi.service.JwtService;
@@ -46,6 +48,7 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
+    private final SystemRepository systemRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
@@ -56,6 +59,7 @@ public class AuthController {
     public AuthController(
             UserRepository userRepository,
             OrganizationRepository organizationRepository,
+            SystemRepository systemRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             AuthenticationManager authenticationManager,
@@ -65,6 +69,7 @@ public class AuthController {
     ) {
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
+        this.systemRepository = systemRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
@@ -91,6 +96,15 @@ public class AuthController {
         org.setName(request.getOrganizationName());
         org.setCreatedAt(Timestamp.from(Instant.now()));
         org = organizationRepository.save(org);
+
+        // Every org needs at least one System for a key to be scoped to
+        // (T10/T12) -- create a default one so Settings' "generate an API
+        // key" flow keeps working without a dedicated system picker yet.
+        SystemEntity defaultSystem = new SystemEntity();
+        defaultSystem.setName("Default System");
+        defaultSystem.setOrganization(org);
+        defaultSystem.setCreatedAt(Timestamp.from(Instant.now()));
+        systemRepository.save(defaultSystem);
 
         User user = new User();
         user.setEmail(request.getEmail());

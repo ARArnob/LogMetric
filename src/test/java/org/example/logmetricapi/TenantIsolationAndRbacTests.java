@@ -126,10 +126,11 @@ class TenantIsolationAndRbacTests {
     @Test
     void adminOnlyEndpoints_rejectUserRole() throws Exception {
         RegisteredUser admin = registerNewOrg();
+        long systemId = createSystem(admin.token());
         String inviteCode = createInvite(admin.token());
         RegisteredUser member = joinOrgAsUser(inviteCode);
 
-        assertStatus(post("/api/keys/generate"), member.token(), 403);
+        assertStatus(post("/api/systems/" + systemId + "/keys"), member.token(), 403);
         assertStatus(get("/api/users"), member.token(), 403);
         assertStatus(post("/api/invites"), member.token(), 403);
         // authorization is denied before the target id is even looked up, so an
@@ -145,8 +146,9 @@ class TenantIsolationAndRbacTests {
     @Test
     void adminOnlyEndpoints_allowAdminRole() throws Exception {
         RegisteredUser admin = registerNewOrg();
+        long systemId = createSystem(admin.token());
 
-        assertStatus(post("/api/keys/generate"), admin.token(), 200);
+        assertStatus(post("/api/systems/" + systemId + "/keys"), admin.token(), 200);
         assertStatus(get("/api/users"), admin.token(), 200);
         assertStatus(post("/api/invites"), admin.token(), 200);
     }
@@ -155,7 +157,7 @@ class TenantIsolationAndRbacTests {
     void adminOnlyEndpoints_rejectMissingAuthentication() throws Exception {
         mockMvc.perform(get("/api/users")).andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/invites")).andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/keys/generate")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/systems/1/keys")).andExpect(status().isUnauthorized());
     }
 
     // ===== helpers =====
@@ -177,6 +179,16 @@ class TenantIsolationAndRbacTests {
                 .andReturn();
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
         return verifyEmail(email);
+    }
+
+    private long createSystem(String adminToken) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/systems")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"t35-system\"}"))
+                .andReturn();
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
     }
 
     private String createInvite(String adminToken) throws Exception {

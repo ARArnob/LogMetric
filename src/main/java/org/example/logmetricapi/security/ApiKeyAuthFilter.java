@@ -4,7 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.example.logmetricapi.model.Organization;
+import org.example.logmetricapi.model.ApiKeyPrincipal;
 import org.example.logmetricapi.service.ApiKeyService;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,10 +29,10 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         String apiKey = request.getHeader(API_KEY_HEADER);
 
         if (apiKey != null) {
-            Organization organization = apiKeyService.validateKey(apiKey);
-            if (organization != null) {
+            ApiKeyPrincipal principal = apiKeyService.validateKey(apiKey);
+            if (principal != null) {
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                        organization, null, Collections.emptyList());
+                        principal, null, Collections.emptyList());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } else {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

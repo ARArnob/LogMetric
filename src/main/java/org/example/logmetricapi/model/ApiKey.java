@@ -22,6 +22,13 @@ public class ApiKey {
     @JoinColumn(name = "organization_id", nullable = false)
     private Organization organization;
 
+    // Nullable during the T10 migration: a key minted before SystemEntity
+    // existed has no system to point at. Every key generated going forward
+    // (via SystemController) always sets this.
+    @ManyToOne
+    @JoinColumn(name = "system_id")
+    private SystemEntity system;
+
     @Column(nullable = false, length = 8)
     private String keyPrefix;
 
@@ -48,6 +55,14 @@ public class ApiKey {
 
     public void setOrganization(Organization organization) {
         this.organization = organization;
+    }
+
+    public SystemEntity getSystem() {
+        return system;
+    }
+
+    public void setSystem(SystemEntity system) {
+        this.system = system;
     }
 
     public String getKeyPrefix() {
