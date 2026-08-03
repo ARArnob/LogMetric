@@ -1,11 +1,14 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { Activity } from "lucide-react";
 import AppShell from "../components/AppShell";
 import ApiKeySection from "../components/settings/ApiKeySection";
+import SystemSection from "../components/settings/SystemSection";
 import OrganizationSection from "../components/settings/OrganizationSection";
 import ChangePasswordSection from "../components/settings/ChangePasswordSection";
 import ServiceAliasSection from "../components/settings/ServiceAliasSection";
+import { SystemInfo, listSystems } from "../lib/api";
 import { useAuth, useRequireAuth } from "../lib/auth";
 import { useTheme, THEMES, THEME_META, Theme } from "../lib/theme";
 
@@ -19,6 +22,25 @@ export default function SettingsPage() {
   const { loading } = useRequireAuth();
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const [systems, setSystems] = useState<SystemInfo[]>([]);
+  const [systemsLoading, setSystemsLoading] = useState(true);
+
+  // Lifted here (rather than fetched independently by each section) so
+  // creating a system in SystemSection is immediately reflected in
+  // ApiKeySection's picker, without a page reload.
+  const refreshSystems = useCallback(async () => {
+    try {
+      setSystems(await listSystems());
+    } catch {
+      // Silent -- same reasoning as the sections' own background refreshes.
+    } finally {
+      setSystemsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshSystems();
+  }, [refreshSystems]);
 
   if (loading) {
     return (
@@ -46,7 +68,16 @@ export default function SettingsPage() {
         </div>
 
         <div className="animate-fade-up">
-          <ApiKeySection isAdmin={user?.role === "ADMIN"} />
+          <SystemSection
+            isAdmin={user?.role === "ADMIN"}
+            systems={systems}
+            loading={systemsLoading}
+            onRefresh={refreshSystems}
+          />
+        </div>
+
+        <div className="animate-fade-up">
+          <ApiKeySection isAdmin={user?.role === "ADMIN"} systems={systems} />
         </div>
 
         <div className="animate-fade-up">

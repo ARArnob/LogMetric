@@ -406,9 +406,7 @@ export async function searchLogs(
 }
 
 // ===== Systems (authenticated; write ops ADMIN only) =====
-// A key is now scoped to a System, not directly to the org (PLAN.md T9-T12).
-// There's no system-picker UI yet -- generateApiKey() below transparently
-// uses the org's first system, creating one if the org somehow has none.
+// A key is scoped to a System, not directly to the org (PLAN.md T9-T12).
 
 export interface SystemInfo {
   id: number;
@@ -437,26 +435,36 @@ export async function createSystem(name: string): Promise<SystemInfo> {
   return parseJsonResponse<SystemInfo>(response);
 }
 
+/**
+ * Fails with a 409 (surfaced via ApiError.message) if the system still has
+ * an active API key -- revoke it first via revokeApiKey(). A system whose
+ * only keys are already revoked deletes cleanly; the backend clears those
+ * rows itself.
+ */
+export async function deleteSystem(id: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/systems/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(response.status, (body && body.message) || "Couldn't delete the system");
+  }
+}
+
 // ===== API keys (authenticated, ADMIN only) =====
 
 /**
- * The raw key is only ever returned by generateApiKey() below -- the server
- * stores it hashed and cannot show it again. listApiKeys() (B5) surfaces
- * everything else: a masked hint, creation date, owning system, and whether
- * it's been revoked.
+ * The raw key is only ever returned here -- the server stores it hashed and
+ * cannot show it again. listApiKeys() (B5) surfaces everything else: a
+ * masked hint, creation date, owning system, and whether it's been revoked.
  */
-export async function generateApiKey(): Promise<string> {
-  const token = getToken();
-  if (!token) {
-    throw new ApiError(401, "Not authenticated");
-  }
-
-  const systems = await listSystems();
-  const system = systems[0] ?? (await createSystem("Default System"));
-
-  const response = await apiFetch(`${API_BASE_URL}/systems/${system.id}/keys`, {
+export async function generateApiKey(systemId: number): Promise<string> {
+  const response = await apiFetch(`${API_BASE_URL}/systems/${systemId}/keys`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(),
     signal: AbortSignal.timeout(8000),
   });
 
@@ -484,6 +492,20 @@ export async function listApiKeys(): Promise<ApiKeyInfo[]> {
   });
   if (response.status === 401) signalSessionExpired();
   return parseJsonResponse<ApiKeyInfo[]>(response);
+}
+
+/** Soft revoke -- the key row stays for audit history, it just stops authenticating. */
+export async function revokeApiKey(id: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/keys/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(response.status, (body && body.message) || "Couldn't revoke the key");
+  }
 }
 
 // ===== Team: users & invites (authenticated, most ADMIN only) =====
