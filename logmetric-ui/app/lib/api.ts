@@ -548,6 +548,172 @@ export async function deleteServiceAlias(rawServiceName: string): Promise<void> 
   }
 }
 
+// ===== Alert rules (ADMIN only) + the alerts SSE channel (any org member) =====
+// PLAN.md T20-T22: AlertRule CRUD is entirely ADMIN-gated, unlike Systems/
+// service aliases which allow any authenticated member to read -- there is
+// no read-only carve-out here. The alerts SSE channel is the opposite: any
+// org member can watch it fire, same as the log stream.
+
+export type AlertMetric = "ERROR_RATE" | "VOLUME_ZSCORE" | "ENTROPY";
+
+export interface AlertRule {
+  id: number;
+  name: string;
+  metric: AlertMetric;
+  threshold: number;
+  windowSeconds: number;
+  targetEmails: string[];
+  enabled: boolean;
+  organizationId: number;
+  createdAt: string;
+}
+
+export interface AlertRuleInput {
+  name: string;
+  metric: AlertMetric;
+  threshold: number;
+  windowSeconds: number;
+  targetEmails: string[];
+  enabled: boolean;
+}
+
+export interface AlertEvent {
+  ruleId: number;
+  ruleName: string;
+  metric: string;
+  detail: string;
+  triggeredAt: string; // ISO-8601 instant
+}
+
+export async function listAlertRules(): Promise<AlertRule[]> {
+  const response = await apiFetch(`${API_BASE_URL}/alert-rules`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<AlertRule[]>(response);
+}
+
+export async function createAlertRule(input: AlertRuleInput): Promise<AlertRule> {
+  const response = await apiFetch(`${API_BASE_URL}/alert-rules`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(input),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<AlertRule>(response);
+}
+
+export async function updateAlertRule(id: number, input: AlertRuleInput): Promise<AlertRule> {
+  const response = await apiFetch(`${API_BASE_URL}/alert-rules/${id}`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(input),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<AlertRule>(response);
+}
+
+export async function deleteAlertRule(id: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/alert-rules/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(response.status, (body && body.message) || "Couldn't delete the rule");
+  }
+}
+
+/**
+ * Same manual fetch-and-parse approach as subscribeToLogStream, for the same
+ * reason (EventSource can't attach an Authorization header) -- see that
+ * function's comment for the full rationale. Kept as a separate function
+ * rather than a generic "subscribe to any channel" helper because the two
+ * event shapes (LogEntry vs AlertEvent) and event names ("log" vs "alert")
+ * differ enough that a shared abstraction would need callback-driven type
+ * parameters for no real reduction in code.
+ */
+export function subscribeToAlertStream(
+  onAlert: (event: AlertEvent) => void,
+  onError?: (err: unknown) => void
+): () => void {
+  const token = getToken();
+  if (!token) {
+    return () => {};
+  }
+
+  let stopped = false;
+  let controller = new AbortController();
+  let retryDelay = SSE_RETRY_BASE_MS;
+
+  async function connect() {
+    controller = new AbortController();
+    try {
+      const response = await apiFetch(`${API_BASE_URL}/alerts/stream`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Stream error: ${response.status}`);
+      }
+
+      retryDelay = SSE_RETRY_BASE_MS;
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+
+        for (const rawEvent of events) {
+          let eventName = "message";
+          let data = "";
+          for (const line of rawEvent.split("\n")) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim();
+            if (line.startsWith("data:")) data += line.slice(5).trim();
+          }
+          if (eventName === "alert" && data) {
+            try {
+              onAlert(JSON.parse(data) as AlertEvent);
+            } catch {
+              // ignore a malformed event payload
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") {
+        return;
+      }
+      onError?.(err);
+    }
+
+    if (stopped) return;
+    await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    retryDelay = Math.min(retryDelay * 2, SSE_RETRY_MAX_MS);
+    if (!stopped) connect();
+  }
+
+  connect();
+
+  return () => {
+    stopped = true;
+    controller.abort();
+  };
+}
+
 // ===== Live tail (SSE, authenticated) =====
 
 const SSE_RETRY_BASE_MS = 1000;

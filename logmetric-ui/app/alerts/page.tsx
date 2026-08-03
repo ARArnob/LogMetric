@@ -1,29 +1,14 @@
 "use client";
 
-import { BellRing, Activity, TrendingUp, Sparkles, Route } from "lucide-react";
+import { Activity } from "lucide-react";
 import AppShell from "../components/AppShell";
-import { useRequireAuth } from "../lib/auth";
-
-const PLANNED = [
-  {
-    icon: TrendingUp,
-    title: "Threshold rules",
-    desc: "Trigger when a service's error rate crosses a limit you set, over a window you choose.",
-  },
-  {
-    icon: Sparkles,
-    title: "Anomaly notifications",
-    desc: "Surface the same EMA and entropy signals the ingestion pipeline already computes.",
-  },
-  {
-    icon: Route,
-    title: "Routing",
-    desc: "Send a rule's alerts to the people who own that service, not everyone in the org.",
-  },
-];
+import AlertRuleSection from "../components/alerts/AlertRuleSection";
+import LiveAlertFeed from "../components/alerts/LiveAlertFeed";
+import { useAuth, useRequireAuth } from "../lib/auth";
 
 export default function AlertsPage() {
   const { loading } = useRequireAuth();
+  const { user } = useAuth();
 
   if (loading) {
     return (
@@ -40,65 +25,14 @@ export default function AlertsPage() {
   }
 
   return (
-    <AppShell title="Alerts" description="Not built yet. Here's what's planned and why it isn't live.">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {PLANNED.map(({ icon: Icon, title, desc }) => (
-          <div key={title} className="card card-sheen p-5 animate-fade-up">
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center mb-3"
-              style={{ background: "var(--accent-dim)" }}
-            >
-              <Icon className="w-4 h-4" style={{ color: "var(--accent)" }} />
-            </div>
-            {/* h2, not h3 -- nothing else on this page sits between it and
-                AppShell's h1, so h3 would skip a level. */}
-            <h2 className="font-bold text-[14px] mb-1.5">{title}</h2>
-            <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-              {desc}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* A static mockup of what a rule card will look like -- explicitly labelled
-          as an example so it can never be mistaken for a live alert. */}
-      <div className="mb-3">
-        <span
-          className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider"
-          style={{ background: "var(--bg-inset)", color: "var(--text-muted)" }}
-        >
-          Example — not live data
-        </span>
-      </div>
-      {/* Dashed border + the "Mockup" badge + the label above already say
-          "not real" -- opacity-70 here used to fade the whole card, which
-          also faded its text well under 4.5:1 contrast (as low as 2.1:1).
-          De-emphasizing "not live" content shouldn't come at the cost of
-          being able to read it. */}
-      <div
-        className="card p-5 flex items-center justify-between gap-4 flex-wrap"
-        style={{ borderStyle: "dashed" }}
-      >
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: "var(--sev-error-dim)", color: "var(--sev-error-text)" }}
-          >
-            <BellRing className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="font-bold text-[14px]">Error rate &gt; 5% for 10 minutes</div>
-            <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-              payments-svc · notify #oncall-payments
-            </div>
-          </div>
+    <AppShell title="Alerts" description="Threshold rules on error rate, traffic volume, and payload entropy -- delivered by email and in real time.">
+      <div className="flex flex-col gap-4 max-w-3xl">
+        <div className="animate-fade-up">
+          <AlertRuleSection isAdmin={user?.role === "ADMIN"} />
         </div>
-        <span
-          className="text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider"
-          style={{ background: "var(--bg-inset)", color: "var(--text-muted)" }}
-        >
-          Mockup
-        </span>
+        <div className="animate-fade-up d1">
+          <LiveAlertFeed />
+        </div>
       </div>
     </AppShell>
   );
