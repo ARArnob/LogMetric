@@ -44,6 +44,8 @@ Dump.java
 ### Local-only planning docs ###
 PLAN.md
 UI-PLAN.md
+# Names an unfixed exploit path -- must not be pushed to a public repo.
+SECURITY-TODO.md
 
 ### Windows / Google Drive folder metadata ###
 desktop.ini
