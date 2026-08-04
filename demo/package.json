@@ -1,0 +1,10 @@
+{
+  "name": "logmetric-demo-tools",
+  "private": true,
+  "type": "module",
+  "description": "Local-only scripts to seed demo orgs/systems and log volume. Not part of the app build.",
+  "dependencies": {
+    "imapflow": "^1.0.161",
+    "mailparser": "^3.7.1"
+  }
+}
