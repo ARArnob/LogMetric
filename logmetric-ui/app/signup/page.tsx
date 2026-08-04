@@ -202,11 +202,18 @@ function SignUpContent() {
             autoComplete="new-password"
             required
             minLength={8}
+            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).*"
+            title="At least 8 characters, with an uppercase letter, a lowercase letter, and a number"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             style={fieldErrors.password ? { borderColor: "var(--sev-error)" } : undefined}
           />
           <FieldError message={fieldErrors.password} />
+          {!fieldErrors.password && (
+            <p className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+              At least 8 characters, with an uppercase letter, a lowercase letter, and a number.
+            </p>
+          )}
         </div>
 
         <button type="submit" disabled={submitting} className="btn btn-primary w-full" style={{ padding: "11px 18px" }}>

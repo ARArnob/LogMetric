@@ -5,6 +5,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.sql.Timestamp;
 import java.util.Collection;
 import java.util.List;
 
@@ -45,6 +46,13 @@ public class User implements UserDetails {
     @Column(nullable = false, columnDefinition = "boolean not null default false")
     private boolean emailVerified = false;
 
+    // Lets a registration recheck (see AuthController.register) tell "brand
+    // new signup, still inside its OTP grace period" apart from "abandoned
+    // days ago" -- same ddl-auto=update-safe explicit-default pattern as
+    // emailVerified above, since this table already has rows.
+    @Column(nullable = false, columnDefinition = "timestamp not null default now()")
+    private Timestamp createdAt;
+
     // --- Constructors ---
     public User() {
     }
@@ -75,6 +83,9 @@ public class User implements UserDetails {
 
     public boolean isEmailVerified() { return emailVerified; }
     public void setEmailVerified(boolean emailVerified) { this.emailVerified = emailVerified; }
+
+    public Timestamp getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }
 
     // --- UserDetails Methods ---
     @Override

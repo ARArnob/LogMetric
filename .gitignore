@@ -40,6 +40,8 @@ replay_pid*.log
 cp.txt
 log.json
 Dump.java
+backend.log
+frontend.log
 
 ### Local-only planning docs ###
 PLAN.md
@@ -52,3 +54,6 @@ desktop.ini
 
 ### Local Claude Code settings ###
 .claude/
+
+### Local demo runner (contains JWT_SECRET) ###
+run-backend.ps1

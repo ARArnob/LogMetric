@@ -2,6 +2,7 @@ node_modules
 .next
 .env
 .env.local
+.env.development.local
 tsconfig.tsbuildinfo
 
 # Ad-hoc Playwright screenshot harness + its output (local visual checks)

@@ -49,9 +49,9 @@ class AuditLogTests {
         String email = "t24-login-" + UUID.randomUUID() + "@test.local";
         registerVerifiedAdmin(email);
 
-        login(email, "password123").andExpect(status().isOk());
+        login(email, "Password123").andExpect(status().isOk());
 
-        JsonNode logs = fetchLogs(loginAndGetToken(email, "password123"));
+        JsonNode logs = fetchLogs(loginAndGetToken(email, "Password123"));
         assertThat(anyEntryMatches(logs, "LOGIN", email, null)).isTrue();
     }
 
@@ -113,7 +113,7 @@ class AuditLogTests {
         mockMvc.perform(post("/api/auth/register-with-invite")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", memberEmail, "password", "password123", "inviteCode", inviteCode))))
+                                "email", memberEmail, "password", "Password123", "inviteCode", inviteCode))))
                 .andExpect(status().isOk());
         String memberCode = FakeMailConfig.lastCodeSentTo(memberEmail);
         mockMvc.perform(post("/api/auth/verify-email")
@@ -153,7 +153,7 @@ class AuditLogTests {
         mockMvc.perform(post("/api/auth/register-with-invite")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", memberEmail, "password", "password123", "inviteCode", inviteCode))))
+                                "email", memberEmail, "password", "Password123", "inviteCode", inviteCode))))
                 .andExpect(status().isOk());
         String memberCode = FakeMailConfig.lastCodeSentTo(memberEmail);
         MvcResult verifyResult = mockMvc.perform(post("/api/auth/verify-email")
@@ -257,7 +257,7 @@ class AuditLogTests {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", email, "password", "password123",
+                                "email", email, "password", "Password123",
                                 "organizationName", "T24-Org-" + UUID.randomUUID()))))
                 .andExpect(status().isOk());
 

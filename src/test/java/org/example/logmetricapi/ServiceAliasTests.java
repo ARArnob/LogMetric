@@ -110,7 +110,7 @@ class ServiceAliasTests {
         mockMvc.perform(post("/api/auth/register-with-invite")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", memberEmail, "password", "password123", "inviteCode", inviteCode))))
+                                "email", memberEmail, "password", "Password123", "inviteCode", inviteCode))))
                 .andExpect(status().isOk());
         String memberCode = FakeMailConfig.lastCodeSentTo(memberEmail);
         MvcResult verifyResult = mockMvc.perform(post("/api/auth/verify-email")
@@ -159,7 +159,7 @@ class ServiceAliasTests {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", email, "password", "password123",
+                                "email", email, "password", "Password123",
                                 "organizationName", "T43-Org-" + UUID.randomUUID()))))
                 .andExpect(status().isOk());
 
