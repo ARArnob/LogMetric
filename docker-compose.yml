@@ -4,7 +4,7 @@ services:
     image: postgres:15-alpine
     container_name: logmetric-postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_DB: logmetric
       POSTGRES_USER: postgres
@@ -17,8 +17,8 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: logmetric-rabbitmq
     ports:
-      - "5672:5672"    # AMQP Protocol
-      - "15672:15672"  # Web Dashboard
+      - "127.0.0.1:5672:5672"    # AMQP Protocol
+      - "127.0.0.1:15672:15672"  # Web Dashboard
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -30,7 +30,7 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.2.8
     container_name: logmetric-elasticsearch
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false   # Disabled security for zero-friction local development
@@ -46,8 +46,8 @@ services:
     image: mailhog/mailhog:v1.0.1
     container_name: logmetric-mailhog
     ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # Web UI
+      - "127.0.0.1:1025:1025"  # SMTP
+      - "127.0.0.1:8025:8025"  # Web UI
 
 volumes:
   postgres_data:
