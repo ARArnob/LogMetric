@@ -42,11 +42,22 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    // A signup that hasn't confirmed its OTP yet might just be the real
+    // owner mid-verification -- only past this window is it treated as
+    // abandoned and its email/org name freed for someone else. Generous
+    // relative to the OTP's own 10-minute expiry (OtpService) since the
+    // owner can keep requesting a fresh code via resend-verification the
+    // whole time; this only guards against a signup nobody ever returns to.
+    private static final Duration UNVERIFIED_SIGNUP_GRACE_PERIOD = Duration.ofHours(1);
 
     private final UserRepository userRepository;
     private final OrganizationRepository organizationRepository;
@@ -85,14 +96,16 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<VerificationPendingResponse> register(@Valid @RequestBody RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        Optional<User> existingByEmail = userRepository.findByEmail(request.getEmail());
+        if (existingByEmail.isPresent() && !reclaimIfAbandoned(existingByEmail.get())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
         }
 
         // Open registration may not join an existing organization by name --
         // that would let anyone read that organization's logs. First user of
         // a brand-new org name becomes its ADMIN.
-        if (organizationRepository.findByName(request.getOrganizationName()).isPresent()) {
+        Optional<Organization> existingByName = organizationRepository.findByName(request.getOrganizationName());
+        if (existingByName.isPresent() && !reclaimOrganizationIfAbandoned(existingByName.get())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Organization already exists -- ask an admin for an invite");
         }
@@ -116,6 +129,7 @@ public class AuthController {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(Role.ADMIN);
         user.setOrganization(org);
+        user.setCreatedAt(Timestamp.from(Instant.now()));
         userRepository.save(user);
 
         return ResponseEntity.ok(issueVerificationCode(user));
@@ -124,7 +138,8 @@ public class AuthController {
     @PostMapping("/register-with-invite")
     @Transactional
     public ResponseEntity<VerificationPendingResponse> registerWithInvite(@Valid @RequestBody RegisterWithInviteRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        Optional<User> existingByEmail = userRepository.findByEmail(request.getEmail());
+        if (existingByEmail.isPresent() && !reclaimIfAbandoned(existingByEmail.get())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
         }
 
@@ -137,9 +152,57 @@ public class AuthController {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(Role.USER);
         user.setOrganization(org);
+        user.setCreatedAt(Timestamp.from(Instant.now()));
         userRepository.save(user);
 
         return ResponseEntity.ok(issueVerificationCode(user));
+    }
+
+    /**
+     * An unverified account past the grace period is treated as abandoned:
+     * delete it (and, if it was that organization's only member, the
+     * organization and its default System too) so the email stops being
+     * permanently squatted by a signup nobody ever finished. Returns whether
+     * the email is now free for this new registration to use.
+     */
+    private boolean reclaimIfAbandoned(User user) {
+        if (user.isEmailVerified() || isWithinGracePeriod(user.getCreatedAt())) {
+            return false;
+        }
+
+        Organization org = user.getOrganization();
+        userRepository.delete(user);
+        if (org != null && userRepository.findByOrganizationId(org.getId()).isEmpty()) {
+            systemRepository.deleteAll(systemRepository.findByOrganizationId(org.getId()));
+            organizationRepository.delete(org);
+        }
+        return true;
+    }
+
+    /**
+     * Mirrors reclaimIfAbandoned for the organization-name check: a name
+     * only counts as taken if the org has a verified member, or more than
+     * the one still-unverified signup that created it. A same-named org
+     * whose sole member never verified and is past the grace period is
+     * abandoned, not claimed.
+     */
+    private boolean reclaimOrganizationIfAbandoned(Organization org) {
+        List<User> members = userRepository.findByOrganizationId(org.getId());
+        boolean abandoned = members.size() == 1
+                && !members.get(0).isEmailVerified()
+                && !isWithinGracePeriod(members.get(0).getCreatedAt());
+        if (!abandoned) {
+            return false;
+        }
+
+        userRepository.delete(members.get(0));
+        systemRepository.deleteAll(systemRepository.findByOrganizationId(org.getId()));
+        organizationRepository.delete(org);
+        return true;
+    }
+
+    private boolean isWithinGracePeriod(Timestamp createdAt) {
+        return createdAt.toInstant().isAfter(Instant.now().minus(UNVERIFIED_SIGNUP_GRACE_PERIOD));
     }
 
     private VerificationPendingResponse issueVerificationCode(User user) {

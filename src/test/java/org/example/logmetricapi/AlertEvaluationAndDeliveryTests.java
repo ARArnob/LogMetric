@@ -139,7 +139,7 @@ class AlertEvaluationAndDeliveryTests {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", email, "password", "password123",
+                                "email", email, "password", "Password123",
                                 "organizationName", "T21-Org-" + UUID.randomUUID()))))
                 .andExpect(status().isOk());
 

@@ -49,13 +49,13 @@ class ForgotPasswordTests {
         forgotPassword(email).andExpect(status().isOk());
         String code = latestResetCode(email);
 
-        MvcResult result = resetPassword(email, code, "newPassword456")
+        MvcResult result = resetPassword(email, code, "NewPassword456")
                 .andExpect(status().isOk())
                 .andReturn();
         assertThat(result.getResponse().getContentAsString()).contains("\"token\"");
 
-        loginAttempt(email, "password123").andExpect(status().isUnauthorized());
-        loginAttempt(email, "newPassword456").andExpect(status().isOk());
+        loginAttempt(email, "Password123").andExpect(status().isUnauthorized());
+        loginAttempt(email, "NewPassword456").andExpect(status().isOk());
     }
 
     @Test
@@ -91,13 +91,13 @@ class ForgotPasswordTests {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", email, "password", "password123",
+                                "email", email, "password", "Password123",
                                 "organizationName", "T38-Org-" + UUID.randomUUID()))))
                 .andExpect(status().isOk());
         String verificationCode = FakeMailConfig.lastCodeSentTo(email);
         assertThat(verificationCode).isNotNull();
 
-        resetPassword(email, verificationCode, "newPassword456").andExpect(status().isBadRequest());
+        resetPassword(email, verificationCode, "NewPassword456").andExpect(status().isBadRequest());
     }
 
     @Test
@@ -120,17 +120,17 @@ class ForgotPasswordTests {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", email, "password", "password123",
+                                "email", email, "password", "Password123",
                                 "organizationName", "T38-Org2-" + UUID.randomUUID()))))
                 .andExpect(status().isOk());
 
-        loginAttempt(email, "password123").andExpect(status().isForbidden());
+        loginAttempt(email, "Password123").andExpect(status().isForbidden());
 
         forgotPassword(email).andExpect(status().isOk());
         String code = latestResetCode(email);
-        resetPassword(email, code, "newPassword456").andExpect(status().isOk());
+        resetPassword(email, code, "NewPassword456").andExpect(status().isOk());
 
-        loginAttempt(email, "newPassword456").andExpect(status().isOk());
+        loginAttempt(email, "NewPassword456").andExpect(status().isOk());
     }
 
     // ===== helpers =====
@@ -140,7 +140,7 @@ class ForgotPasswordTests {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", email, "password", "password123",
+                                "email", email, "password", "Password123",
                                 "organizationName", "T38-Org-" + UUID.randomUUID()))))
                 .andExpect(status().isOk());
 

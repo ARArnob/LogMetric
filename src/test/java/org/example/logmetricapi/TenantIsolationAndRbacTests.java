@@ -202,7 +202,7 @@ class TenantIsolationAndRbacTests {
         String email = "t35-admin-" + suffix + "@test.local";
         Map<String, String> body = Map.of(
                 "email", email,
-                "password", "password123",
+                "password", "Password123",
                 "organizationName", "T35-Org-" + suffix
         );
         MvcResult result = mockMvc.perform(post("/api/auth/register")
@@ -234,7 +234,7 @@ class TenantIsolationAndRbacTests {
         String email = "t35-member-" + UUID.randomUUID() + "@test.local";
         Map<String, String> body = Map.of(
                 "email", email,
-                "password", "password123",
+                "password", "Password123",
                 "inviteCode", inviteCode
         );
         MvcResult result = mockMvc.perform(post("/api/auth/register-with-invite")

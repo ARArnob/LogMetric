@@ -87,9 +87,14 @@ export default function ChangePasswordSection() {
             placeholder="At least 8 characters"
             required
             minLength={8}
+            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).*"
+            title="At least 8 characters, with an uppercase letter, a lowercase letter, and a number"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
           />
+          <p className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+            At least 8 characters, with an uppercase letter, a lowercase letter, and a number.
+          </p>
         </div>
 
         <div>

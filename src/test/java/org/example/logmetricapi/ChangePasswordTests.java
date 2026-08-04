@@ -41,29 +41,29 @@ class ChangePasswordTests {
     @Test
     void wrongCurrentPasswordIsRejected() throws Exception {
         String email = registerAndVerify();
-        String token = loginAndGetToken(email, "password123");
+        String token = loginAndGetToken(email, "Password123");
 
-        changePassword(token, "notMyPassword", "newPassword456").andExpect(status().isBadRequest());
-        loginAttempt(email, "password123").andExpect(status().isOk());
+        changePassword(token, "notMyPassword", "NewPassword456").andExpect(status().isBadRequest());
+        loginAttempt(email, "Password123").andExpect(status().isOk());
     }
 
     @Test
     void weakNewPasswordIsRejected() throws Exception {
         String email = registerAndVerify();
-        String token = loginAndGetToken(email, "password123");
+        String token = loginAndGetToken(email, "Password123");
 
-        changePassword(token, "password123", "short").andExpect(status().isBadRequest());
+        changePassword(token, "Password123", "short").andExpect(status().isBadRequest());
     }
 
     @Test
     void successfulChangeInvalidatesTheOldPasswordAndAllowsTheNewOne() throws Exception {
         String email = registerAndVerify();
-        String token = loginAndGetToken(email, "password123");
+        String token = loginAndGetToken(email, "Password123");
 
-        changePassword(token, "password123", "newPassword456").andExpect(status().isOk());
+        changePassword(token, "Password123", "NewPassword456").andExpect(status().isOk());
 
-        loginAttempt(email, "password123").andExpect(status().isUnauthorized());
-        loginAttempt(email, "newPassword456").andExpect(status().isOk());
+        loginAttempt(email, "Password123").andExpect(status().isUnauthorized());
+        loginAttempt(email, "NewPassword456").andExpect(status().isOk());
     }
 
     @Test
@@ -71,7 +71,7 @@ class ChangePasswordTests {
         mockMvc.perform(post("/api/auth/change-password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "currentPassword", "password123", "newPassword", "newPassword456"))))
+                                "currentPassword", "Password123", "newPassword", "NewPassword456"))))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -82,7 +82,7 @@ class ChangePasswordTests {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", email, "password", "password123",
+                                "email", email, "password", "Password123",
                                 "organizationName", "T42-Org-" + UUID.randomUUID()))))
                 .andExpect(status().isOk());
 

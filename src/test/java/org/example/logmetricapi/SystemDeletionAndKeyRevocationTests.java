@@ -172,7 +172,7 @@ class SystemDeletionAndKeyRevocationTests {
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", email, "password", "password123",
+                                "email", email, "password", "Password123",
                                 "organizationName", "SysKey-Org-" + UUID.randomUUID()))))
                 .andExpect(status().isOk());
         return verifyEmailAndGetToken(email);
@@ -183,7 +183,7 @@ class SystemDeletionAndKeyRevocationTests {
         mockMvc.perform(post("/api/auth/register-with-invite")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "email", email, "password", "password123", "inviteCode", inviteCode))))
+                                "email", email, "password", "Password123", "inviteCode", inviteCode))))
                 .andExpect(status().isOk());
         return verifyEmailAndGetToken(email);
     }
