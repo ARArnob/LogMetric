@@ -73,6 +73,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
+        <!-- S5 (SECURITY-TODO.md): exposes GET /actuator/health so Render (or any
+             load balancer) can actually health-check the app, which previously
+             nothing could do. Only "health" is web-exposed by default; other
+             actuator endpoints (env, beans, etc.) stay off rather than widening
+             the attack surface. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
@@ -92,6 +101,14 @@
             <scope>runtime</scope>
         </dependency>
 
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
@@ -99,6 +116,22 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- S1 (SECURITY-TODO.md): JwtService now refuses to start with
+                         application.properties' placeholder jwt.secret, so the test JVM
+                         needs its own real value, via the same env var production sets.
+                         Supplied here rather than a src/test/resources/application.properties
+                         override, which would shadow the whole main properties file on the
+                         test classpath (not just this one property), since Maven puts
+                         target/test-classes ahead of target/classes. -->
+                    <environmentVariables>
+                        <JWT_SECRET>test-only-secret-9f3a7c1e5b6d4082a1c9e7f4b3d6a8c05e2f19d4b7a3c6e8f1a4d7b0c3e6f9a2</JWT_SECRET>
+                    </environmentVariables>
+                </configuration>
             </plugin>
         </plugins>
     </build>

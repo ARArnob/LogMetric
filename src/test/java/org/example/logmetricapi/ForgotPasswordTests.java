@@ -174,7 +174,14 @@ class ForgotPasswordTests {
     }
 
     private ResultActions loginAttempt(String email, String password) throws Exception {
+        // X-Forwarded-For keyed to the (unique, random) email keeps this test's
+        // LoginAttemptService IP-bucket isolated from every other test class --
+        // otherwise every MockMvc call in the suite shares one default remote
+        // address, and their failed-login counts would pile up in the same
+        // bucket (LoginAttemptService is a singleton reused across @SpringBootTest
+        // classes) and could eventually 429 an unrelated test.
         return mockMvc.perform(post("/api/auth/login")
+                .header("X-Forwarded-For", email)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(Map.of("email", email, "password", password))));
     }

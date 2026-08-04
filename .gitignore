@@ -48,6 +48,8 @@ PLAN.md
 UI-PLAN.md
 # Names an unfixed exploit path -- must not be pushed to a public repo.
 SECURITY-TODO.md
+# Competitive positioning/strategy notes, not code -- not for a public repo.
+FUTURE_ENHANCEMENTS.md
 
 ### Windows / Google Drive folder metadata ###
 desktop.ini
@@ -57,3 +59,9 @@ desktop.ini
 
 ### Local demo runner (contains JWT_SECRET) ###
 run-backend.ps1
+start-logmetric.ps1
+
+### Demo data generator output (contains live API keys + admin passwords) ###
+demo/demo-data.json
+demo/node_modules/
+demo/package-lock.json

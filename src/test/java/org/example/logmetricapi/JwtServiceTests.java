@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -73,5 +74,36 @@ class JwtServiceTests {
         // behavior down rather than papering over it with a try/catch here.
         assertThatThrownBy(() -> jwtService.isTokenValid(token, user))
                 .isInstanceOf(ExpiredJwtException.class);
+    }
+
+    // S1 (SECURITY-TODO.md): the app must refuse to boot with the placeholder secret
+    // that ships in application.properties -- it's public (the repo is public), so
+    // leaving it in place lets anyone forge an admin token for any organization.
+
+    @Test
+    void validateSecretRejectsTheKnownPlaceholderFromApplicationProperties() {
+        JwtService jwtService = new JwtService();
+        ReflectionTestUtils.setField(jwtService, "secretKey",
+                "thisIsADefaultSecretKeyThatIsAtLeast32BytesLongForHS256");
+
+        assertThatThrownBy(jwtService::validateSecret)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("JWT_SECRET");
+    }
+
+    @Test
+    void validateSecretRejectsATooShortSecret() {
+        JwtService jwtService = new JwtService();
+        ReflectionTestUtils.setField(jwtService, "secretKey", "way-too-short");
+
+        assertThatThrownBy(jwtService::validateSecret)
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validateSecretAcceptsARealRandomSecret() {
+        JwtService jwtService = newJwtService(3_600_000L);
+
+        assertThatCode(jwtService::validateSecret).doesNotThrowAnyException();
     }
 }

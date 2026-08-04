@@ -25,9 +25,11 @@ import org.example.logmetricapi.repository.UserRepository;
 import org.example.logmetricapi.service.AuditLogService;
 import org.example.logmetricapi.service.InviteService;
 import org.example.logmetricapi.service.JwtService;
+import org.example.logmetricapi.service.LoginAttemptService;
 import org.example.logmetricapi.service.MailService;
 import org.example.logmetricapi.service.OtpService;
 import org.example.logmetricapi.util.AuthUtils;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -69,6 +71,7 @@ public class AuthController {
     private final OtpService otpService;
     private final MailService mailService;
     private final AuditLogService auditLogService;
+    private final LoginAttemptService loginAttemptService;
 
     public AuthController(
             UserRepository userRepository,
@@ -80,7 +83,8 @@ public class AuthController {
             InviteService inviteService,
             OtpService otpService,
             MailService mailService,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            LoginAttemptService loginAttemptService
     ) {
         this.userRepository = userRepository;
         this.organizationRepository = organizationRepository;
@@ -92,6 +96,7 @@ public class AuthController {
         this.otpService = otpService;
         this.mailService = mailService;
         this.auditLogService = auditLogService;
+        this.loginAttemptService = loginAttemptService;
     }
 
     @PostMapping("/register")
@@ -303,19 +308,25 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        String clientIp = clientIp(httpRequest);
+        loginAttemptService.assertNotLocked(request.getEmail(), clientIp);
+
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
             );
         } catch (DisabledException e) {
+            // Account status, not a credential guess -- doesn't count toward the lockout.
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Email not verified");
         } catch (AuthenticationException e) {
+            loginAttemptService.recordFailure(request.getEmail(), clientIp);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
+        loginAttemptService.recordSuccess(request.getEmail());
         String jwtToken = jwtService.generateToken(user);
         auditLogService.record(user.getOrganization().getId(), user.getEmail(), AuditAction.LOGIN, null);
 
@@ -325,6 +336,21 @@ public class AuthController {
                 user.getRole().name(),
                 user.getOrganization().getId()
         ));
+    }
+
+    /**
+     * S2 (SECURITY-TODO.md): Render (and any other reverse-proxy deploy) puts the
+     * real client address in X-Forwarded-For -- httpRequest.getRemoteAddr() alone
+     * would just be the proxy's address for every request, making the per-IP side
+     * of LoginAttemptService a no-op in production. Takes the first hop, which is
+     * the original client for a single reverse proxy in front of the app.
+     */
+    private String clientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     /**

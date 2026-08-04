@@ -158,7 +158,7 @@ docker compose up -d      # Postgres :5432, RabbitMQ :5672 (+:15672 UI), Elastic
 
 ### 2. Configure environment
 Set a strong `JWT_SECRET` (≥32 bytes, raw UTF-8 — not Base64) — the app fails fast at startup
-without one in any environment beyond local dev:
+without one, in every environment including local dev:
 ```bash
 export JWT_SECRET=$(openssl rand -hex 32)
 ```

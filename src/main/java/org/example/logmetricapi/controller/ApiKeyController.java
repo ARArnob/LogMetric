@@ -4,6 +4,7 @@ import org.example.logmetricapi.dto.ApiKeyResponse;
 import org.example.logmetricapi.model.ApiKey;
 import org.example.logmetricapi.model.AuditAction;
 import org.example.logmetricapi.repository.ApiKeyRepository;
+import org.example.logmetricapi.service.ApiKeyService;
 import org.example.logmetricapi.service.AuditLogService;
 import org.example.logmetricapi.util.AuthUtils;
 import org.springframework.http.HttpStatus;
@@ -27,10 +28,12 @@ import java.util.List;
 public class ApiKeyController {
 
     private final ApiKeyRepository apiKeyRepository;
+    private final ApiKeyService apiKeyService;
     private final AuditLogService auditLogService;
 
-    public ApiKeyController(ApiKeyRepository apiKeyRepository, AuditLogService auditLogService) {
+    public ApiKeyController(ApiKeyRepository apiKeyRepository, ApiKeyService apiKeyService, AuditLogService auditLogService) {
         this.apiKeyRepository = apiKeyRepository;
+        this.apiKeyService = apiKeyService;
         this.auditLogService = auditLogService;
     }
 
@@ -67,6 +70,9 @@ public class ApiKeyController {
 
         apiKey.setRevoked(true);
         apiKeyRepository.save(apiKey);
+        // Otherwise the just-revoked key would keep authenticating out of the
+        // validation cache until its TTL elapses.
+        apiKeyService.invalidateAll();
         auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
                 AuditAction.KEY_REVOKED, apiKey.getKeyPrefix() + "…");
 

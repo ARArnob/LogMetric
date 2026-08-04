@@ -4,10 +4,16 @@ import org.example.logmetricapi.model.LogEntry;
 import org.example.logmetricapi.repository.LogRepository;
 import org.example.logmetricapi.service.PatternRecognitionService;
 import org.example.logmetricapi.service.SseService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class LogConsumer {
+
+    // Named "logger" not "log" -- consumeLog(LogEntry log) already uses "log" for
+    // the message parameter, and that name is far more established in this file.
+    private static final Logger logger = LoggerFactory.getLogger(LogConsumer.class);
 
     private final LogRepository logRepository;
     private final PatternRecognitionService patternService;
@@ -22,7 +28,7 @@ public class LogConsumer {
     @org.springframework.amqp.rabbit.annotation.RabbitListener(queues = "log.queue")
     public void consumeLog(LogEntry log) {
         if (log.getMessage() == null || log.getMessage().isEmpty()) {
-            System.out.println("Payload rejected");
+            logger.warn("Payload rejected: blank message (org {})", log.getOrganizationId());
             return;
         }
         
@@ -48,6 +54,6 @@ public class LogConsumer {
         logRepository.save(log);
         sseService.broadcast(log);
 
-        System.out.println("Successfully ingested log with hash: " + hash);
+        logger.debug("Successfully ingested log with hash: {}", hash);
     }
 }

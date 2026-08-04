@@ -284,8 +284,18 @@ export default function VolumeHistogram({
   );
 }
 
+// Time-only ("06:00") is ambiguous for the two footer endpoints -- with no
+// date, a 24h/48h/N-day span reads identically to a same-day one. Always
+// include month/day here, unlike the plain axis-top label which doesn't
+// need it.
 function fmt(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return new Date(ts).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 function fmtFull(ts: number): string {

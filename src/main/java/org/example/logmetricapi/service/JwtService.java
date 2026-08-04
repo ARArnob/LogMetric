@@ -21,6 +21,11 @@ public class JwtService {
 
     private static final int MIN_SECRET_BYTES = 32; // HS256 requires a >=256-bit key
 
+    // The fallback application.properties ships for local dev when JWT_SECRET isn't set.
+    // It's 55 bytes, so it passes the length check on its own -- must be rejected by
+    // exact match too, or anyone who reads the (public) repo can forge an admin token.
+    private static final String KNOWN_DEFAULT_SECRET = "thisIsADefaultSecretKeyThatIsAtLeast32BytesLongForHS256";
+
     @Value("${jwt.secret}")
     private String secretKey;
 
@@ -28,8 +33,9 @@ public class JwtService {
     private long jwtExpiration;
 
     /**
-     * Fails fast at startup rather than at first login if JWT_SECRET is too
-     * short for HS256 -- a plain UTF-8 string, not Base64, per getSignInKey().
+     * Fails fast at startup rather than at first login if JWT_SECRET is missing, too
+     * short for HS256 (plain UTF-8 string, not Base64, per getSignInKey()), or left at
+     * the well-known placeholder value that ships in application.properties.
      */
     @PostConstruct
     public void validateSecret() {
@@ -37,6 +43,13 @@ public class JwtService {
             throw new IllegalStateException(
                     "jwt.secret must be at least " + MIN_SECRET_BYTES + " bytes long for HS256. " +
                             "Set the JWT_SECRET environment variable to a strong random value.");
+        }
+        if (secretKey.equals(KNOWN_DEFAULT_SECRET)) {
+            throw new IllegalStateException(
+                    "JWT_SECRET is set to the placeholder value from application.properties. " +
+                            "That value is public (it's in the repo), so anyone can forge an admin token " +
+                            "for any organization with it. Set JWT_SECRET to a real random value, e.g. " +
+                            "`export JWT_SECRET=$(openssl rand -hex 32)`.");
         }
     }
 

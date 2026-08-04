@@ -1,3 +1,9 @@
+# DEV-ONLY. Elasticsearch runs with xpack.security.enabled=false, RabbitMQ uses
+# guest/guest, and Postgres uses a default password -- every service here is wide
+# open with no auth beyond "can you reach the port." Fine on a laptop with ports
+# bound to 127.0.0.1 (as they are below). Do NOT run this file, as-is, on any
+# host with a public IP -- that's an unauthenticated data breach waiting to
+# happen, not a hypothetical one. (S5, SECURITY-TODO.md)
 services:
   # 1. Relational Database (PostgreSQL)
   postgres:

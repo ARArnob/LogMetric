@@ -1,5 +1,8 @@
 package org.example.logmetricapi.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
 import java.util.List;
 
 public class LogSearchRequest {
@@ -8,7 +11,14 @@ public class LogSearchRequest {
     private List<String> serviceNames;
     private Long startDate;
     private Long endDate;
+
+    @Min(value = 0, message = "page must be 0 or greater")
     private int page = 0;
+
+    // Upper-bounded well under Elasticsearch's default index.max_result_window (10000)
+    // so an oversized request 400s instead of erroring out of the ES call.
+    @Min(value = 1, message = "size must be at least 1")
+    @Max(value = 1000, message = "size must not exceed 1000")
     private int size = 50;
 
     private String systemId;

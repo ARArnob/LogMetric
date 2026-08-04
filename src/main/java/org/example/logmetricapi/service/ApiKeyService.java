@@ -40,6 +40,18 @@ public class ApiKeyService {
         return rawKey;
     }
 
+    /**
+     * The validation cache is keyed by the raw key, but revocation only ever has the
+     * hashed key (raw keys are never stored, so there's nothing to evict by directly).
+     * Revocation is rare, so clearing every cached entry org-wide is a fine trade for
+     * not letting a just-revoked key keep authenticating out of the cache for up to
+     * apiKeys' TTL -- ApiKeyController.revokeKey() calls this after persisting the flip.
+     */
+    @org.springframework.cache.annotation.CacheEvict(value = "apiKeys", allEntries = true)
+    public void invalidateAll() {
+    }
+
+    @org.springframework.cache.annotation.Cacheable(value = "apiKeys", key = "#rawKey", unless = "#result == null")
     public ApiKeyPrincipal validateKey(String rawKey) {
         if (rawKey == null || rawKey.isEmpty()) {
             return null;
