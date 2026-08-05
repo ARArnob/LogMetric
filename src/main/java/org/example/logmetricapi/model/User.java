@@ -51,7 +51,7 @@ public class User implements UserDetails {
     // days ago" -- same ddl-auto=update-safe explicit-default pattern as
     // emailVerified above, since this table already has rows.
     @Column(nullable = false, columnDefinition = "timestamp not null default now()")
-    private Timestamp createdAt;
+    private Timestamp createdAt = Timestamp.from(java.time.Instant.now());
 
     // --- Constructors ---
     public User() {
