@@ -11,12 +11,19 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregation;
 import org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
+import org.example.logmetricapi.repository.LogPatternRepository;
+import org.example.logmetricapi.model.LogPattern;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
+import org.example.logmetricapi.repository.PatternParamWindowRepository;
+import org.example.logmetricapi.model.PatternParamWindow;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.sql.Timestamp;
+import java.util.stream.Collectors;
 
 /**
  * Evaluates a single org-scoped AlertRule over its own window (PLAN.md T21).
@@ -35,11 +42,17 @@ public class AlertEvaluationService {
 
     private final ElasticsearchOperations elasticsearchOperations;
     private final LogAnalyticsService logAnalyticsService;
+    private final LogPatternRepository logPatternRepository;
+    private final PatternParamWindowRepository patternParamWindowRepository;
 
     public AlertEvaluationService(ElasticsearchOperations elasticsearchOperations,
-                                    LogAnalyticsService logAnalyticsService) {
+                                    LogAnalyticsService logAnalyticsService,
+                                    LogPatternRepository logPatternRepository,
+                                    PatternParamWindowRepository patternParamWindowRepository) {
         this.elasticsearchOperations = elasticsearchOperations;
         this.logAnalyticsService = logAnalyticsService;
+        this.logPatternRepository = logPatternRepository;
+        this.patternParamWindowRepository = patternParamWindowRepository;
     }
 
     public record EvaluationResult(boolean triggered, String detail) {
@@ -78,7 +91,121 @@ public class AlertEvaluationService {
             case ERROR_RATE -> evaluateErrorRate(rule, hits, total);
             case VOLUME_ZSCORE -> evaluateVolumeZScore(rule, orgId, hits);
             case ENTROPY -> evaluateEntropy(rule, hits);
+            case NEW_PATTERN -> evaluateNewPattern(rule, orgId, windowStart);
+            case PATTERN_SILENCE -> evaluatePatternSilence(rule, orgId, now);
+            case PARAM_CARDINALITY -> evaluateParamCardinality(rule, orgId, now);
         };
+    }
+
+    private EvaluationResult evaluatePatternSilence(AlertRule rule, Long orgId, long now) {
+        // Only consider patterns with an established cadence to avoid paging on one-off logs
+        long minOccurrences = 10L;
+        List<LogPattern> patterns = logPatternRepository.findByOrganizationIdAndOccurrenceCountGreaterThanEqual(orgId, minOccurrences);
+        for (LogPattern pattern : patterns) {
+            long firstSeen = pattern.getFirstSeen().getTime();
+            long lastSeen = pattern.getLastSeen().getTime();
+            long count = pattern.getOccurrenceCount();
+            
+            // avgIntervalMs = (lastSeen - firstSeen) / (occurrenceCount - 1)
+            long avgIntervalMs = (lastSeen - firstSeen) / (count - 1);
+            long silentForMs = now - lastSeen;
+            
+            // Skip patterns where avgIntervalMs is 0 or pattern is younger than threshold * avgInterval
+            // Note: A mean interval is a crude cadence model and will misjudge bursty patterns. 
+            // It is deliberately simple; a proper fix is interval variance or a histogram.
+            if (avgIntervalMs <= 0 || (lastSeen - firstSeen) < rule.getThreshold() * avgIntervalMs) {
+                continue;
+            }
+            
+            if (silentForMs > rule.getThreshold() * avgIntervalMs) {
+                String detail = String.format(
+                        "Pattern '%s' has been silent for %d ms (threshold %.1f * avg interval %d ms)",
+                        pattern.getTemplate(), silentForMs, rule.getThreshold(), avgIntervalMs);
+                return new EvaluationResult(true, detail);
+            }
+        }
+        return EvaluationResult.notTriggered();
+    }
+
+    private EvaluationResult evaluateNewPattern(AlertRule rule, Long orgId, long windowStart) {
+        List<LogPattern> newPatterns = logPatternRepository.findByOrganizationIdAndFirstSeenAfter(orgId, new Timestamp(windowStart));
+        int count = newPatterns.size();
+        int threshold = (int) rule.getThreshold();
+        
+        if (count >= threshold) {
+            StringBuilder sb = new StringBuilder();
+            int limit = Math.min(count, 3);
+            for (int i = 0; i < limit; i++) {
+                if (i > 0) sb.append(", ");
+                sb.append("'").append(newPatterns.get(i).getTemplate()).append("'");
+            }
+            if (count > limit) {
+                sb.append(" and ").append(count - limit).append(" more");
+            }
+            String patternWord = count == 1 ? "pattern" : "patterns";
+            String detail = String.format("%d new %s detected: %s", count, patternWord, sb.toString());
+            return new EvaluationResult(true, detail);
+        }
+        return EvaluationResult.notTriggered();
+    }
+
+    private EvaluationResult evaluateParamCardinality(AlertRule rule, Long orgId, long now) {
+        // We need 7 windows (6 prior + 1 latest). 5 minutes per window = 35 minutes.
+        // Add a 5-minute buffer to ensure we don't miss the 7th window due to millisecond jitter.
+        long fortyMinsAgo = now - 40 * 60 * 1000L;
+        
+        List<PatternParamWindow> recentWindows = patternParamWindowRepository
+                .findByOrganizationIdAndWindowStartGreaterThanEqualOrderByWindowStartDesc(orgId, new Timestamp(fortyMinsAgo));
+        
+        // Group by (patternHash, paramIndex)
+        record GroupKey(String patternHash, int paramIndex) {}
+        Map<GroupKey, List<PatternParamWindow>> grouped = recentWindows.stream()
+                .collect(Collectors.groupingBy(w -> new GroupKey(w.getPatternHash(), w.getParamIndex())));
+                
+        for (Map.Entry<GroupKey, List<PatternParamWindow>> entry : grouped.entrySet()) {
+            GroupKey key = entry.getKey();
+            List<PatternParamWindow> windows = entry.getValue();
+            // Windows are fetched ordered by windowStart DESC, so index 0 is the most recent.
+            // Note: Since flush doesn't guarantee strict timing if delayed, we should sort just in case:
+            windows.sort((w1, w2) -> w2.getWindowStart().compareTo(w1.getWindowStart()));
+            
+            PatternParamWindow latest = windows.get(0);
+            
+            // If the latest window ended more than 10 minutes ago, it's not a "current" spike
+            if (now - latest.getWindowEnd().getTime() > 10 * 60 * 1000L) {
+                continue;
+            }
+            
+            // Get the prior windows (up to 6)
+            List<PatternParamWindow> priorWindows = windows.subList(1, windows.size());
+            
+            if (priorWindows.size() < 6) {
+                // Skip cold start
+                continue;
+            }
+            
+            // Limit to exactly 6 prior windows in case we fetched more
+            priorWindows = priorWindows.subList(0, 6);
+            
+            double sumDistinct = 0;
+            for (PatternParamWindow prior : priorWindows) {
+                sumDistinct += prior.getDistinctCount();
+            }
+            double meanDistinct = sumDistinct / 6.0;
+            
+            if (latest.getDistinctCount() > rule.getThreshold() * meanDistinct) {
+                String template = logPatternRepository.findByOrganizationIdAndPatternHash(orgId, key.patternHash())
+                        .map(LogPattern::getTemplate)
+                        .orElse(key.patternHash());
+                        
+                String detail = String.format(
+                        "Parameter %d in '%s' distinct count %d exceeds threshold %.1f * mean %.1f",
+                        key.paramIndex() + 1, template, latest.getDistinctCount(), rule.getThreshold(), meanDistinct);
+                return new EvaluationResult(true, detail);
+            }
+        }
+        
+        return EvaluationResult.notTriggered();
     }
 
     private EvaluationResult evaluateErrorRate(AlertRule rule, SearchHits<LogEntry> hits, long total) {

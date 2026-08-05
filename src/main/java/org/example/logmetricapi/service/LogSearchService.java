@@ -13,6 +13,7 @@ import co.elastic.clients.json.JsonData;
 import org.example.logmetricapi.dto.LogSearchRequest;
 import org.example.logmetricapi.dto.LogSearchResponse;
 import org.example.logmetricapi.model.LogEntry;
+import org.example.logmetricapi.repository.LogPatternRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
@@ -30,9 +31,11 @@ import java.util.stream.Collectors;
 public class LogSearchService {
 
     private final ElasticsearchOperations elasticsearchOperations;
+    private final LogPatternRepository logPatternRepository;
 
-    public LogSearchService(ElasticsearchOperations elasticsearchOperations) {
+    public LogSearchService(ElasticsearchOperations elasticsearchOperations, LogPatternRepository logPatternRepository) {
         this.elasticsearchOperations = elasticsearchOperations;
+        this.logPatternRepository = logPatternRepository;
     }
 
     public LogSearchResponse searchLogs(LogSearchRequest request, String organizationId) {
@@ -126,7 +129,7 @@ public class LogSearchService {
         response.setHistogram(parseHistogram(searchHits));
         response.setSeverityDistribution(parseSeverityDistribution(searchHits));
         response.setServiceNames(parseServiceNames(searchHits));
-        response.setPatternClusters(parsePatternClusters(searchHits));
+        response.setPatternClusters(parsePatternClusters(searchHits, organizationId));
         response.setHistogramInterval(resolution.label());
 
         return response;
@@ -249,7 +252,16 @@ public class LogSearchService {
      * deserializes straight into a LogEntry via the client's attached mapper --
      * no manual JSON field extraction needed.
      */
-    private List<Map<String, Object>> parsePatternClusters(SearchHits<LogEntry> searchHits) {
+    private List<Map<String, Object>> parsePatternClusters(SearchHits<LogEntry> searchHits, String organizationId) {
+        // Load all patterns for this org so we can attach firstSeen to the clusters
+        Map<String, java.sql.Timestamp> firstSeenMap = new HashMap<>();
+        if (organizationId != null) {
+            try {
+                Long orgIdLong = Long.parseLong(organizationId);
+                logPatternRepository.findByOrganizationId(orgIdLong, org.springframework.data.domain.Pageable.unpaged())
+                        .forEach(p -> firstSeenMap.put(p.getPatternHash(), p.getFirstSeen()));
+            } catch (NumberFormatException ignored) {}
+        }
         List<Map<String, Object>> result = new ArrayList<>();
         if (searchHits.getAggregations() != null) {
             org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations aggregations =
@@ -264,8 +276,12 @@ public class LogSearchService {
             if (aggregate != null && aggregate.isSterms()) {
                 aggregate.sterms().buckets().array().forEach(bucket -> {
                     Map<String, Object> bucketMap = new HashMap<>();
-                    bucketMap.put("patternHash", bucket.key().stringValue());
+                    String hash = bucket.key().stringValue();
+                    bucketMap.put("patternHash", hash);
                     bucketMap.put("count", bucket.docCount());
+                    if (firstSeenMap.containsKey(hash)) {
+                        bucketMap.put("firstSeen", firstSeenMap.get(hash).toInstant().toString());
+                    }
 
                     Map<String, Long> levels = new HashMap<>();
                     if (bucket.aggregations().containsKey("by_level")) {
