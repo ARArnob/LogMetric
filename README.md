@@ -76,7 +76,7 @@ graph TD
 5. **Alerting.** Every 60 seconds, `AlertScheduler` iterates each organization's enabled
    `AlertRule`s and asks `AlertEvaluationService` to run an org-scoped Elasticsearch query over
    that rule's own window, evaluating one of six metrics: `ERROR_RATE`, an EMA-based
-   `VOLUME_ZSCORE`, Shannon-entropy-based `ENTROPY` (obfuscated-payload detection), `NEW_PATTERN`, `PATTERN_SILENCE`, or `PARAM_CARDINALITY`. A triggered
+   `VOLUME_ZSCORE`, Shannon-entropy-based `ENTROPY` (obfuscated-payload detection), `NEW_PATTERN`, `PATTERN_SILENCE`, or `PARAM_CARDINALITY` (parameter cardinality anomalies). A triggered
    rule goes through `AlertDeliveryService`, which sends exactly one email (every recipient in a
    single `To` header) and one event on an org-scoped `alerts` SSE channel, gated by a configurable
    cooldown so a sustained incident produces one notification, not one per tick.
@@ -93,12 +93,13 @@ graph TD
 ## 🛠️ Technology Stack
 
 **Backend**
-- Spring Boot 4.0.6 (Web MVC, Security, Data JPA, Data Elasticsearch, Mail)
-- PostgreSQL — organizations, systems, users, invites, API keys, alert rules, OTP codes, audit log
-- Elasticsearch — log storage, full-text search, aggregations
+- Spring Boot 4.0.6 (Web MVC, Security, Data JPA, Data Elasticsearch, Mail, Scheduling)
+- PostgreSQL — organizations, systems, users, invites, API keys, alert rules, OTP codes, audit log, log patterns, parameter stats
+- Elasticsearch — log storage, full-text search, aggregations, pattern clustering
 - RabbitMQ — async ingestion queue
 - JWT (HS384) for session auth; SHA-256-hashed API keys for ingestion auth
 - MailHog (dev) / SMTP — OTP-based email verification, password reset, and alert delivery
+- In-memory concurrent rate-limiting for login brute-force protection and parameter cardinality tracking
 - No Lombok — explicit getters/setters throughout; constructor injection only
 
 **Frontend** (`logmetric-ui/`)
@@ -120,7 +121,8 @@ LogMetric/
 │   ├── controller/      AuthController, LogController, SystemController, ApiKeyController,
 │   │                    AlertRuleController, AlertStreamController, InviteController,
 │   │                    UserController, OrganizationController, ServiceAliasController,
-│   │                    AuditLogController, GlobalExceptionHandler
+│   │                    AuditLogController, AnalyticsController, PatternRegistryController,
+│   │                    DeploymentController, GlobalExceptionHandler
 │   ├── dto/             Request/response records for every endpoint
 │   ├── model/           User, Organization, SystemEntity, Role, ApiKey, ApiKeyPrincipal,
 │   │                    InviteToken, AlertRule, AlertMetric, OtpToken, OtpPurpose, ServiceAlias,
@@ -131,7 +133,8 @@ LogMetric/
 │   ├── service/         LogSearchService, LogAnalyticsService, PatternRecognitionService,
 │   │                    JwtService, ApiKeyService, InviteService, OtpService, MailService,
 │   │                    AlertEvaluationService, AlertDeliveryService, AuditLogService,
-│   │                    SseService, CustomUserDetailsService, DatabaseSeeder
+│   │                    SseService, CustomUserDetailsService, DatabaseSeeder, LoginAttemptService,
+│   │                    ParameterStatsService, CompressionAnalyticsService
 │   └── util/            AuthUtils (principal → organizationId/systemId/User resolution), HashUtil
 ├── src/main/resources/application.properties
 ├── docker-compose.yml   Postgres · RabbitMQ · Elasticsearch · MailHog
@@ -217,7 +220,10 @@ with no backend and synthetic data.
   CRUD, enable/disable, and a recipient multi-select — not a placeholder.
 - **Pattern clustering UI.** A dedicated `/patterns` view groups events by structural template —
   "342 events across 4 services," not 342 near-identical rows — with per-cluster drill-down.
-- **Compression & Cost Analytics.** A dashboard panel showing aggregate analytics of log patterns, including total occurrences, distinct templates, and projected storage savings achieved by grouping repetitive logs.
+- **Topology visualization.** A dedicated `/topology` page visualizes the `Organization → System` hierarchy
+  — each system card shows its creation date, live severity distribution, top services by volume, and active API key count,
+  with quick links to drill into each system's logs in the Explorer.
+- **Compression & Cost Analytics.** A dedicated analytics panel showing aggregate statistics: total log events, distinct structural templates, events-per-template ratio, projected storage savings, and top 5 patterns by volume—giving ops teams immediate visibility into compression gains from pattern clustering.
 - **Deploy markers.** Overlay visual markers (dashed lines) aligned with log timestamps on the ingest volume histogram, dynamically matched to the active date range.
 - **Real-time live tail.** Org-scoped Server-Sent Events with scroll anchoring (new rows don't
   yank you away from what you're reading), pause/buffer, and automatic reconnect with capped
@@ -230,6 +236,8 @@ with no backend and synthetic data.
 - **Settings.** Self-service API key generation with a ready-to-run curl snippet (the raw key is
   shown exactly once, since it's stored hashed and cannot be retrieved again) plus a list of
   existing keys' metadata; organization rename; password change; service display aliases.
+- **Parameter Intelligence.** The system tracks parameter cardinality per pattern—distinct count of variable values seen in each log position—enabling anomaly detection when a parameter suddenly exhibits explosive growth (a sign of ID injection, regex explosion, or memory leaks). Integrated into the `PARAM_CARDINALITY` alert metric and backed by a time-windowed stats service to cap memory overhead.
+- **Login Rate Limiting.** Per-email and per-IP brute-force protection on `/auth/login`: 5 failed attempts lock an email or IP for 15 minutes, preventing credential stuffing and guessing attacks.
 - **Frontend polish.** Three complete themes with a validated, colour-vision-deficiency-checked
   status palette; a command palette (Ctrl+K); responsive from 375px to 1920px, including a
   bottom-sheet presentation for drawers/filters on mobile; virtualized log tables above 200 rows;
@@ -238,9 +246,6 @@ with no backend and synthetic data.
 
 ## 🚧 Not yet built
 
-- **A true Topology page.** Logs and API keys are already scoped by a real `System` entity with
-  full CRUD (`/api/systems`), but there's no dedicated frontend view visualizing the
-  `Organization → System` hierarchy itself — Settings' API key flow uses it transparently instead.
 - **Per-user system monitoring assignment.** Unblocked (Systems exist) but explicitly deprioritized:
   narrowing read access from "whole org" to "assigned systems only" would need to be enforced in
   every read path (search, SSE, every aggregation), and a half-applied version of that is worse
@@ -291,8 +296,8 @@ uses `X-API-KEY: <key>` instead.
 | POST | `/deployments` | JWT, `ADMIN` | Record a new system deployment marker |
 | GET | `/deployments` | JWT | List deployments matching a date range |
 | GET | `/deployments/{id}/new-patterns` | JWT | List new log patterns seen since a specific deployment |
-| GET | `/patterns` | JWT | List org-scoped log patterns (clusters) sorted by volume/new/recent |
-| GET | `/analytics/compression` | JWT | Get org-scoped compression and cost-savings statistics |
+| GET | `/patterns` | JWT | List org-scoped log patterns (clusters) sorted by volume/new/recent; paginated |
+| GET | `/analytics/compression` | JWT | Get org-scoped compression statistics: total events, distinct templates, events-per-template, projected savings, top 5 patterns by volume |
 
 ### Example: ingest a log
 ```bash
@@ -343,14 +348,15 @@ The message above and one for user `9021` from a different IP both hash to the s
 via search, SSE, or any admin endpoint; every `ADMIN`-gated endpoint 403s a `USER` JWT and an
 API-key principal, 200s an `ADMIN`), `EmailVerificationTests`, `ForgotPasswordTests`,
 `ChangePasswordTests`, `OrganizationRenameTests`, `ServiceAliasTests`, `AlertRuleTests`,
-`AlertEvaluationAndDeliveryTests`, and `AuditLogTests`.
+`AlertEvaluationAndDeliveryTests`, `AuditLogTests`, `AbandonedSignupReclaimTests`,
+`LoginRateLimitTests`, `SystemDeletionAndKeyRevocationTests`, `DeploymentTests`,
+`PatternRegistryTests`, `NewPatternAlertTests`, `SilenceAlertTests`,
+`ParameterIntelligenceTests`, and `CompressionAnalyticsTests`.
 
 ---
 
 ## 📈 Roadmap
 
-What's left is narrow: a dedicated Topology page visualizing the `Organization → System` hierarchy
-(the backend and API have supported it since Phase 1; there's just no frontend view for it yet),
-and per-user system monitoring assignment — unblocked but deliberately deprioritized, since a
-half-applied second scoping layer would be worse than the current, fully-tested org-level boundary.
-See the project's internal planning docs for the full task-by-task history.
+What's left is narrow: per-user system monitoring assignment — unblocked but deliberately
+deprioritized, since a half-applied second scoping layer would be worse than the current,
+fully-tested org-level boundary. See "Not yet built" above.
