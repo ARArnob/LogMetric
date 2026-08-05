@@ -15,7 +15,7 @@
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { ORG_DEFS, DEMO_PASSWORD, aliasEmail } from "./config.mjs";
+import { ORG_DEFS, DEMO_PASSWORD, aliasEmail, DEPLOYMENT_VERSION, DEPLOYMENT_NOTES, DEPLOYMENT_DAYS_AGO } from "./config.mjs";
 import { api, waitForOtpCode } from "./lib.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -71,7 +71,25 @@ async function setupOrg(orgDef) {
     await api(`/api/systems/${defaultSystem.id}`, { method: "DELETE", token });
   }
 
-  return { orgName, adminEmail, adminPassword: DEMO_PASSWORD, systems };
+  // Org-wide deploy marker (no systemId) at a fixed point inside the 14-day
+  // window send-demo-logs.mjs seeds -- gives P3's histogram marker and P2's
+  // "new pattern since this deploy" story something real to point at, instead
+  // of requiring a manual POST /api/deployments before every demo.
+  console.log(`Recording a deployment marker (${DEPLOYMENT_VERSION}) ...`);
+  const deployedAt = Date.now() - DEPLOYMENT_DAYS_AGO * 24 * 60 * 60 * 1000;
+  const deployment = await api("/api/deployments", {
+    method: "POST",
+    token,
+    body: { version: DEPLOYMENT_VERSION, notes: DEPLOYMENT_NOTES, deployedAt },
+  });
+
+  return {
+    orgName,
+    adminEmail,
+    adminPassword: DEMO_PASSWORD,
+    systems,
+    deployment: { id: deployment.id, version: deployment.version, deployedAt: deployment.deployedAt },
+  };
 }
 
 async function main() {
@@ -90,6 +108,7 @@ async function main() {
     for (const sys of org.systems) {
       console.log(`  System "${sys.name}" (id ${sys.id}): ${sys.services.join(", ")}`);
     }
+    console.log(`  Deployment marker: ${org.deployment.version} at ${new Date(org.deployment.deployedAt).toLocaleString()}`);
     console.log("");
   }
   console.log(`Saved to ${OUTPUT_PATH} -- run "node demo/send-demo-logs.mjs" next to populate them with logs.`);

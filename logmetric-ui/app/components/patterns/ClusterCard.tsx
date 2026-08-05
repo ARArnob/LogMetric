@@ -13,6 +13,10 @@ export default function ClusterCard({ cluster, onClick }: { cluster: PatternClus
   const segments = SEVERITY_ORDER.map((lvl) => ({ lvl, count: cluster.levels[lvl] ?? 0 })).filter((s) => s.count > 0);
   const segmentTotal = segments.reduce((sum, s) => sum + s.count, 0) || cluster.count;
 
+  const isNew = cluster.firstSeen
+    ? Date.now() - new Date(cluster.firstSeen).getTime() < 24 * 60 * 60 * 1000
+    : false;
+
   return (
     <button
       onClick={onClick}
@@ -29,6 +33,14 @@ export default function ClusterCard({ cluster, onClick }: { cluster: PatternClus
         <span className="text-2xl font-extrabold leading-none" style={{ color: "var(--text-primary)" }}>
           {compactNumber(cluster.count)}
         </span>
+        {isNew && (
+          <span
+            className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase leading-none"
+            style={{ background: "var(--accent)", color: "#000" }}
+          >
+            New
+          </span>
+        )}
         <span className="text-xs" style={{ color: "var(--text-muted)" }}>
           event{cluster.count === 1 ? "" : "s"}
           {cluster.serviceCount ? ` across ${cluster.serviceCount} service${cluster.serviceCount === 1 ? "" : "s"}` : ""}

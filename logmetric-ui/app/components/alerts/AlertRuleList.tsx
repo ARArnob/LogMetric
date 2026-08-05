@@ -11,6 +11,9 @@ const METRIC_LABEL: Record<string, string> = {
   ERROR_RATE: "Error rate",
   VOLUME_ZSCORE: "Volume z-score",
   ENTROPY: "Payload entropy",
+  NEW_PATTERN: "New pattern detected",
+  PATTERN_SILENCE: "Pattern went silent",
+  PARAM_CARDINALITY: "Parameter cardinality spike",
 };
 
 function secondsToHuman(seconds: number): string {
@@ -103,8 +106,12 @@ export default function AlertRuleList({
                 <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
                   {rule.metric === "ERROR_RATE"
                     ? `> ${(rule.threshold * 100).toFixed(0)}%`
+                    : rule.metric === "PATTERN_SILENCE" || rule.metric === "PARAM_CARDINALITY"
+                    ? `> ${rule.threshold}x`
+                    : rule.metric === "NEW_PATTERN"
+                    ? `>= ${rule.threshold}`
                     : `> ${rule.threshold}`}{" "}
-                  over {secondsToHuman(rule.windowSeconds)}
+                  {rule.metric === "PARAM_CARDINALITY" ? "over fixed 5m window" : `over ${secondsToHuman(rule.windowSeconds)}`}
                 </div>
               </td>
               <td className="px-5 py-3" style={{ color: "var(--text-secondary)" }}>

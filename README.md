@@ -75,8 +75,8 @@ graph TD
    distribution, service breakdown, and pattern-cluster aggregation alongside the matched logs.
 5. **Alerting.** Every 60 seconds, `AlertScheduler` iterates each organization's enabled
    `AlertRule`s and asks `AlertEvaluationService` to run an org-scoped Elasticsearch query over
-   that rule's own window, evaluating one of three metrics: `ERROR_RATE`, an EMA-based
-   `VOLUME_ZSCORE`, or Shannon-entropy-based `ENTROPY` (obfuscated-payload detection). A triggered
+   that rule's own window, evaluating one of six metrics: `ERROR_RATE`, an EMA-based
+   `VOLUME_ZSCORE`, Shannon-entropy-based `ENTROPY` (obfuscated-payload detection), `NEW_PATTERN`, `PATTERN_SILENCE`, or `PARAM_CARDINALITY`. A triggered
    rule goes through `AlertDeliveryService`, which sends exactly one email (every recipient in a
    single `To` header) and one event on an org-scoped `alerts` SSE channel, gated by a configurable
    cooldown so a sustained incident produces one notification, not one per tick.
@@ -211,12 +211,14 @@ with no backend and synthetic data.
   service-name aggregations; brush-to-zoom on the histogram; admin-editable display aliases for
   the free-text service names logs actually carry.
 - **Real alerting.** Org-scoped `AlertRule`s (error rate, EMA z-score volume spikes, Shannon-entropy
-  payload obfuscation), each with its own threshold, window, and recipient list validated against
+  payload obfuscation, new patterns, pattern silence, and parameter cardinality), each with its own threshold, window, and recipient list validated against
   real org members. A rule-driven scheduler evaluates every 60s and delivers through email (single
   digest, cooldown-gated) and a live SSE feed. A real rule editor on `/alerts` gives admins full
   CRUD, enable/disable, and a recipient multi-select — not a placeholder.
 - **Pattern clustering UI.** A dedicated `/patterns` view groups events by structural template —
   "342 events across 4 services," not 342 near-identical rows — with per-cluster drill-down.
+- **Compression & Cost Analytics.** A dashboard panel showing aggregate analytics of log patterns, including total occurrences, distinct templates, and projected storage savings achieved by grouping repetitive logs.
+- **Deploy markers.** Overlay visual markers (dashed lines) aligned with log timestamps on the ingest volume histogram, dynamically matched to the active date range.
 - **Real-time live tail.** Org-scoped Server-Sent Events with scroll anchoring (new rows don't
   yank you away from what you're reading), pause/buffer, and automatic reconnect with capped
   exponential backoff if the connection drops.
@@ -286,6 +288,11 @@ uses `X-API-KEY: <key>` instead.
 | DELETE | `/service-aliases` | JWT, `ADMIN` | Clear a service's display alias |
 | GET | `/audit-logs` | JWT, `ADMIN` | Paginated, org-scoped audit history |
 | DELETE | `/audit-logs` | JWT, `ADMIN` | Purge audit entries older than `olderThanDays` |
+| POST | `/deployments` | JWT, `ADMIN` | Record a new system deployment marker |
+| GET | `/deployments` | JWT | List deployments matching a date range |
+| GET | `/deployments/{id}/new-patterns` | JWT | List new log patterns seen since a specific deployment |
+| GET | `/patterns` | JWT | List org-scoped log patterns (clusters) sorted by volume/new/recent |
+| GET | `/analytics/compression` | JWT | Get org-scoped compression and cost-savings statistics |
 
 ### Example: ingest a log
 ```bash
@@ -330,7 +337,7 @@ The message above and one for user `9021` from a different IP both hash to the s
 ```bash
 ./mvnw verify
 ```
-63 tests across dependency-free unit tests (`JwtServiceTests`, `PatternRecognitionServiceTests`,
+115 tests across dependency-free unit tests (`JwtServiceTests`, `PatternRecognitionServiceTests`,
 `LogAnalyticsServiceTests`) and full-stack integration tests requiring `docker compose up -d`:
 `TenantIsolationAndRbacTests` (two orgs, two API keys — asserts one can never read the other's data
 via search, SSE, or any admin endpoint; every `ADMIN`-gated endpoint 403s a `USER` JWT and an

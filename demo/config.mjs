@@ -10,8 +10,8 @@ export const BACKEND_URL = process.env.LOGMETRIC_BACKEND_URL ?? "http://localhos
 // each org's verification email to `user+alias@gmail.com`, which Gmail
 // delivers straight back into this same inbox, and reads it back out via
 // IMAP using the same app password your backend already uses for SMTP.
-export const GMAIL_USER = process.env.LOGMETRIC_GMAIL_USER;
-export const GMAIL_APP_PASSWORD = process.env.LOGMETRIC_GMAIL_APP_PASSWORD;
+export const GMAIL_USER = process.env.LOGMETRIC_GMAIL_USER ?? "ararnob1002@gmail.com";
+export const GMAIL_APP_PASSWORD = process.env.LOGMETRIC_GMAIL_APP_PASSWORD ?? "ptkdprgsbfgeprqd";
 
 if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
   throw new Error(
@@ -107,3 +107,30 @@ export const LEVEL_TEMPLATES = {
     ],
   },
 };
+
+// Heartbeat pattern (PLAN-PATTERN-INTELLIGENCE.md P4 demo note): fires on a
+// steady cadence long enough to establish one (AlertEvaluationService requires
+// 10+ occurrences), then deliberately stops partway through the seeded
+// window -- so PATTERN_SILENCE has something real to alert on right after
+// seeding, instead of the presenter having to wait for a pattern to go quiet
+// live.
+export const HEARTBEAT_TEMPLATE = "Heartbeat check from {service} succeeded";
+export const HEARTBEAT_COUNT = 40;
+export const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes between beats
+export const HEARTBEAT_SILENT_SINCE_MS = 2 * 24 * 60 * 60 * 1000; // last beat 2 days before "now"
+
+// Post-deploy error templates (P2 + P3 demo): never emitted anywhere else in
+// this generator, so their first occurrence is guaranteed to be brand new --
+// and each is timestamped just a few minutes after the seeded deployment
+// below, so GET /api/deployments/{id}/new-patterns and a NEW_PATTERN alert
+// both have a genuine causal story ("new template right after this deploy")
+// instead of a random coincidence.
+export const POST_DEPLOY_ERROR_TEMPLATES = [
+  "Unhandled exception in checkoutV2Handler: TypeError: cannot read property 'total' of undefined",
+  "Feature flag 'new-tax-engine' returned malformed response for order {oid}",
+  "Migration guard blocked write: schema version mismatch on {table}",
+];
+
+export const DEPLOYMENT_VERSION = "v2.1.0";
+export const DEPLOYMENT_NOTES = "Rolled out the new checkout tax engine";
+export const DEPLOYMENT_DAYS_AGO = 3; // fixed point inside the 14-day seeded window

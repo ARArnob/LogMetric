@@ -1,5 +1,6 @@
 "use client";
 
+import { Deployment } from "../../lib/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SEVERITY, SEVERITY_ORDER, Severity, compactNumber } from "../../lib/severity";
 
@@ -59,11 +60,13 @@ function spanLabel(ms: number): string {
  */
 export default function VolumeHistogram({
   buckets,
+  deployments = [],
   height = 132,
   interval = "hour",
   onBrush,
 }: {
   buckets: HistogramBucket[];
+  deployments?: Deployment[];
   height?: number;
   /** Must match what the backend actually bucketed by -- never hardcode this. */
   interval?: string;
@@ -128,6 +131,10 @@ export default function VolumeHistogram({
 
   const active = hover !== null ? displayBuckets[hover] : null;
   const mergedSpanMs = merged && displayBuckets.length > 1 ? displayBuckets[1].timestamp - displayBuckets[0].timestamp : null;
+  const bucketMs = displayBuckets.length > 1 ? displayBuckets[1].timestamp - displayBuckets[0].timestamp : 3_600_000;
+  const minMs = displayBuckets[0].timestamp;
+  const maxMs = displayBuckets[displayBuckets.length - 1].timestamp + bucketMs;
+  const totalSpan = maxMs - minMs;
 
   return (
     <div className="relative">
@@ -159,6 +166,32 @@ export default function VolumeHistogram({
           className="absolute left-0 right-0 pointer-events-none"
           style={{ bottom: "50%", height: 1, background: "var(--grid-line)" }}
         />
+
+        {/* deploy markers */}
+        {deployments.map(d => {
+          if (d.deployedAt < minMs || d.deployedAt > maxMs) return null;
+          const pct = ((d.deployedAt - minMs) / totalSpan) * 100;
+          return (
+            <div
+              key={d.id}
+              className="absolute top-0 bottom-0 pointer-events-none"
+              style={{ 
+                left: `${pct}%`, 
+                width: 2, 
+                background: "var(--accent-dim)", 
+                borderLeft: "1px dashed var(--accent)",
+                zIndex: 4
+              }}
+            >
+              <div 
+                className="absolute -top-5 left-1 text-[9px] px-1 rounded-sm whitespace-nowrap"
+                style={{ background: "var(--accent)", color: "var(--bg-card)" }}
+              >
+                {d.version}
+              </div>
+            </div>
+          );
+        })}
 
         {/* brush selection overlay */}
         {dragging && dragEnd !== null && (

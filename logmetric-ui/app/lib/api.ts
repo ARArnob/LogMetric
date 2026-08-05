@@ -51,6 +51,7 @@ export interface PatternCluster {
   sampleService?: string;
   serviceCount?: number;
   dominantService?: string;
+  firstSeen?: string;
 }
 
 export interface LogSearchResponse {
@@ -103,6 +104,7 @@ function normalizeSearchResponse(raw: unknown): LogSearchResponse {
         sampleService: bucket.sampleService != null ? String(bucket.sampleService) : undefined,
         serviceCount: bucket.serviceCount != null ? Number(bucket.serviceCount) : undefined,
         dominantService: bucket.dominantService != null ? String(bucket.dominantService) : undefined,
+        firstSeen: bucket.firstSeen != null ? String(bucket.firstSeen) : undefined,
       };
     }),
     histogramInterval: typeof r.histogramInterval === "string" ? r.histogramInterval : "hour",
@@ -374,6 +376,31 @@ export async function getCurrentUser(): Promise<AuthUser> {
 
 // ===== Log search (authenticated) =====
 
+export interface CompressionStatsResponse {
+  totalEvents: number;
+  distinctTemplates: number;
+  eventsPerTemplate: number;
+  avgMessageBytes: number;
+  rawBytes: number;
+  templateBytes: number;
+  projectedBytesWithSampling: number;
+  projectedSavingPercent: number;
+  topTemplatesByVolume: {
+    template: string;
+    occurrenceCount: number;
+    sharePercent: number;
+  }[];
+}
+
+export async function getCompressionStats(): Promise<CompressionStatsResponse> {
+  const response = await apiFetch(`${API_BASE_URL}/analytics/compression`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<CompressionStatsResponse>(response);
+}
+
 export async function searchLogs(
   request: LogSearchRequest = {},
   opts: { signal?: AbortSignal } = {}
@@ -452,6 +479,31 @@ export async function deleteSystem(id: number): Promise<void> {
     const body = await response.json().catch(() => null);
     throw new ApiError(response.status, (body && body.message) || "Couldn't delete the system");
   }
+}
+
+// ===== Deployments (authenticated) =====
+
+export interface Deployment {
+  id: number;
+  systemId?: number;
+  version: string;
+  notes?: string;
+  deployedAt: number;
+}
+
+export async function getDeployments(from?: number, to?: number): Promise<Deployment[]> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", String(from));
+  if (to) params.set("to", String(to));
+  const qs = params.toString();
+  const url = qs ? `${API_BASE_URL}/deployments?${qs}` : `${API_BASE_URL}/deployments`;
+
+  const response = await apiFetch(url, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  return parseJsonResponse<Deployment[]>(response);
 }
 
 // ===== API keys (authenticated, ADMIN only) =====
@@ -627,7 +679,7 @@ export async function deleteServiceAlias(rawServiceName: string): Promise<void> 
 // no read-only carve-out here. The alerts SSE channel is the opposite: any
 // org member can watch it fire, same as the log stream.
 
-export type AlertMetric = "ERROR_RATE" | "VOLUME_ZSCORE" | "ENTROPY";
+export type AlertMetric = "ERROR_RATE" | "VOLUME_ZSCORE" | "ENTROPY" | "NEW_PATTERN" | "PATTERN_SILENCE" | "PARAM_CARDINALITY";
 
 export interface AlertRule {
   id: number;

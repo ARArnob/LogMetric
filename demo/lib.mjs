@@ -93,11 +93,11 @@ export async function waitForOtpCode(email, { timeoutMs = 60_000, intervalMs = 3
   }
 }
 
-function randomInt(min, max) {
+export function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function fillTemplate(template) {
+export function fillTemplate(template) {
   return template
     .replace("{ms}", randomInt(20, 4000))
     .replace("{uid}", randomInt(1000, 9999))

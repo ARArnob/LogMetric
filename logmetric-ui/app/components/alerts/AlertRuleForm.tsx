@@ -10,6 +10,9 @@ const METRIC_OPTIONS: SelectOption[] = [
   { value: "ERROR_RATE", label: "Error rate" },
   { value: "VOLUME_ZSCORE", label: "Volume z-score (spike / drop detection)" },
   { value: "ENTROPY", label: "Payload entropy (obfuscation detection)" },
+  { value: "NEW_PATTERN", label: "New pattern" },
+  { value: "PATTERN_SILENCE", label: "Pattern silence" },
+  { value: "PARAM_CARDINALITY", label: "Parameter cardinality spike" },
 ];
 
 const THRESHOLD_HELP: Record<AlertMetric, string> = {
@@ -18,6 +21,12 @@ const THRESHOLD_HELP: Record<AlertMetric, string> = {
     "Standard deviations above a service's own moving-average baseline. 3.0 is a reasonable starting point.",
   ENTROPY:
     "Shannon entropy in bits over a 32-character window. Obfuscated payloads (encoded shells, injection strings) typically exceed ~4.5.",
+  NEW_PATTERN:
+    "Log templates never seen before by this organisation. Threshold is a count -- 1 fires on any new template in the window.",
+  PATTERN_SILENCE:
+    "A pattern with an established cadence (10+ occurrences) that stops firing. Threshold is a multiplier on its normal gap -- 5.0 fires at 5x the usual interval since last seen.",
+  PARAM_CARDINALITY:
+    "Threshold is a multiplier on the mean distinct-value count of the prior 6 windows. 3.0 fires at 3x the normal distinct-value count.",
 };
 
 function secondsToHuman(seconds: number): string {
@@ -116,7 +125,16 @@ export default function AlertRuleForm({
           <Select
             value={metric}
             options={METRIC_OPTIONS}
-            onChange={(v) => setMetric(v as AlertMetric)}
+            onChange={(v) => {
+              const newMetric = v as AlertMetric;
+              setMetric(newMetric);
+              if (newMetric === "NEW_PATTERN") setThreshold("1");
+              else if (newMetric === "PATTERN_SILENCE") setThreshold("5.0");
+              else if (newMetric === "PARAM_CARDINALITY") setThreshold("3.0");
+              else if (newMetric === "VOLUME_ZSCORE") setThreshold("3.0");
+              else if (newMetric === "ENTROPY") setThreshold("4.5");
+              else setThreshold("0.3");
+            }}
             ariaLabel="Metric"
           />
         </div>
@@ -140,27 +158,41 @@ export default function AlertRuleForm({
           </p>
         </div>
 
-        <div>
-          <label htmlFor="rule-window" className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
-            Window (seconds)
-          </label>
-          <input
-            id="rule-window"
-            type="number"
-            min={1}
-            step={1}
-            value={windowSeconds}
-            onChange={(e) => setWindowSeconds(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg text-sm"
-            style={{ background: "var(--bg-inset)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}
-            required
-          />
-          {windowNumber > 0 && (
+        {metric === "PARAM_CARDINALITY" ? (
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
+              Window
+            </label>
+            <div className="w-full px-3 py-2 rounded-lg text-sm" style={{ background: "var(--bg-inset)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}>
+              Evaluated over fixed 5-minute windows, compared against the trailing 30 minutes (6 windows).
+            </div>
             <p className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
-              Evaluated over the trailing {secondsToHuman(windowNumber)}, checked every 60s.
+              This metric ignores the window setting and runs on a fixed schedule.
             </p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="rule-window" className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>
+              Window (seconds)
+            </label>
+            <input
+              id="rule-window"
+              type="number"
+              min={1}
+              step={1}
+              value={windowSeconds}
+              onChange={(e) => setWindowSeconds(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={{ background: "var(--bg-inset)", border: "1px solid var(--border-default)", color: "var(--text-primary)" }}
+              required
+            />
+            {windowNumber > 0 && (
+              <p className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+                Evaluated over the trailing {secondsToHuman(windowNumber)}, checked every 60s.
+              </p>
+            )}
+          </div>
+        )}
 
         <div>
           <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>

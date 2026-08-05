@@ -11,8 +11,9 @@ import SeverityBar from "../components/charts/SeverityBar";
 import VolumeHistogram from "../components/charts/VolumeHistogram";
 import CopyButton from "../components/ui/CopyButton";
 import TimeRangePicker, { TimeRangeValue, presetRange } from "../components/TimeRangePicker";
+import { CompressionPanel } from "../components/analytics/CompressionPanel";
 import { useAuth } from "../lib/auth";
-import { API_BASE_URL, isDemoMode, searchLogs } from "../lib/api";
+import { API_BASE_URL, isDemoMode, searchLogs, getDeployments, Deployment } from "../lib/api";
 import { useLogSearch } from "../lib/useLogSearch";
 import { compactNumber } from "../lib/severity";
 import { useServiceAliases } from "../lib/serviceAliases";
@@ -101,6 +102,17 @@ function DashboardContent() {
     startDate: range.startDate,
     endDate: range.endDate,
   });
+
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  useEffect(() => {
+    if (range.id === "all" || !token) {
+      setDeployments([]);
+      return;
+    }
+    getDeployments(range.startDate, range.endDate)
+      .then(setDeployments)
+      .catch(() => setDeployments([]));
+  }, [range.id, range.startDate, range.endDate, token]);
 
   function handleRangeChange(next: TimeRangeValue) {
     setRange(next);
@@ -323,6 +335,7 @@ function DashboardContent() {
               ) : (
                 <VolumeHistogram
                   buckets={data.histogram}
+                  deployments={deployments}
                   interval={data.histogramInterval}
                   onBrush={(start, end) => handleRangeChange({ id: "custom", startDate: start, endDate: end })}
                 />
@@ -373,6 +386,10 @@ function DashboardContent() {
                 <TopList items={topPatterns.items} max={topPatterns.max} />
               )}
             </div>
+          </div>
+
+          <div className="mb-5 animate-fade-up d6">
+            <CompressionPanel />
           </div>
 
           {/* Stream */}
