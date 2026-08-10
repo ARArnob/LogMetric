@@ -73,11 +73,10 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(Arrays.asList(
                 "https://*.vercel.app",
+                "https://logmetric.tech",
+                "https://*.logmetric.tech",
                 "http://localhost:3000",
-                "http://localhost:3001",
-                // Temporary: home-hosted demo for faculty review, reachable via the
-                // presenter's public IP. Remove once the demo is over.
-                "http://103.77.117.205:3000"));
+                "http://localhost:3001"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

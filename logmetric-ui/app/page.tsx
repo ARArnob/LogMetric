@@ -16,6 +16,7 @@ import {
   Waves,
 } from "lucide-react";
 import ThemeToggle from "./components/ThemeToggle";
+import { useAuth } from "./lib/auth";
 
 // Badge text uses the -text tokens so the level stays legible on the light
 // theme. This pool is cycled by TerminalWindow (F16) rather than rendered
@@ -103,6 +104,7 @@ const PIPELINE = [
 
 export default function Home() {
   const terminalRows = useTerminalRows();
+  const { token, loading } = useAuth();
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
@@ -147,12 +149,20 @@ export default function Home() {
 
           <div className="flex items-center gap-2">
             <ThemeToggle compact />
-            <Link href="/signin" className="btn btn-ghost hidden sm:inline-flex" style={{ padding: "8px 14px" }}>
-              Sign in
-            </Link>
-            <Link href="/signup" className="btn btn-primary" style={{ padding: "8px 16px" }}>
-              Get started
-            </Link>
+            {!loading && token ? (
+              <Link href="/dashboard" className="btn btn-primary" style={{ padding: "8px 16px" }}>
+                Go to dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/signin" className="btn btn-ghost hidden sm:inline-flex" style={{ padding: "8px 14px" }}>
+                  Sign in
+                </Link>
+                <Link href="/signup" className="btn btn-primary" style={{ padding: "8px 16px" }}>
+                  Get started
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -223,14 +233,23 @@ export default function Home() {
             </p>
 
             <div className="animate-fade-up d3 flex flex-col sm:flex-row items-center justify-center gap-3 mb-14">
-              <Link href="/signup" className="btn btn-primary w-full sm:w-auto" style={{ padding: "12px 24px" }}>
-                Start ingesting logs
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-              <Link href="/signin" className="btn btn-ghost w-full sm:w-auto" style={{ padding: "12px 24px" }}>
-                <Activity className="w-4 h-4" style={{ color: "var(--accent)" }} />
-                Sign in to dashboard
-              </Link>
+              {!loading && token ? (
+                <Link href="/dashboard" className="btn btn-primary w-full sm:w-auto" style={{ padding: "12px 24px" }}>
+                  Go to dashboard
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <>
+                  <Link href="/signup" className="btn btn-primary w-full sm:w-auto" style={{ padding: "12px 24px" }}>
+                    Start ingesting logs
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                  <Link href="/signin" className="btn btn-ghost w-full sm:w-auto" style={{ padding: "12px 24px" }}>
+                    <Activity className="w-4 h-4" style={{ color: "var(--accent)" }} />
+                    Sign in to dashboard
+                  </Link>
+                </>
+              )}
             </div>
           </div>
 
@@ -393,10 +412,17 @@ export default function Home() {
               <p className="max-w-md mx-auto mb-8 text-sm" style={{ color: "var(--text-secondary)", lineHeight: 1.7 }}>
                 Spin up a workspace, generate an API key, and start streaming logs in minutes.
               </p>
-              <Link href="/signup" className="btn btn-primary" style={{ padding: "12px 28px" }}>
-                Create your workspace
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              {!loading && token ? (
+                <Link href="/dashboard" className="btn btn-primary" style={{ padding: "12px 28px" }}>
+                  Go to dashboard
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <Link href="/signup" className="btn btn-primary" style={{ padding: "12px 28px" }}>
+                  Create your workspace
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              )}
             </div>
           </div>
         </section>

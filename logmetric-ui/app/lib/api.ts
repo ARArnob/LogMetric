@@ -150,8 +150,7 @@ export interface VerificationPendingResponse {
 
 // ===== Config =====
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081/api";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 /**
  * Public marketing/demo view: fabricated data, no backend or login
@@ -560,6 +559,20 @@ export async function revokeApiKey(id: number): Promise<void> {
   }
 }
 
+/** Hard delete -- removes the key entirely from the database. */
+export async function deleteApiKey(id: number): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/keys/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (response.status === 401) signalSessionExpired();
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(response.status, (body && body.message) || "Couldn't delete the key");
+  }
+}
+
 // ===== Team: users & invites (authenticated, most ADMIN only) =====
 
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
@@ -769,7 +782,7 @@ export function subscribeToAlertStream(
 ): () => void {
   const token = getToken();
   if (!token) {
-    return () => {};
+    return () => { };
   }
 
   let stopped = false;
@@ -794,7 +807,7 @@ export function subscribeToAlertStream(
       const decoder = new TextDecoder();
       let buffer = "";
 
-      for (;;) {
+      for (; ;) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -901,7 +914,7 @@ export function subscribeToLogStream(
 ): () => void {
   const token = getToken();
   if (!token) {
-    return () => {};
+    return () => { };
   }
 
   let stopped = false;
@@ -927,7 +940,7 @@ export function subscribeToLogStream(
       const decoder = new TextDecoder();
       let buffer = "";
 
-      for (;;) {
+      for (; ;) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });

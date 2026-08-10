@@ -99,7 +99,7 @@ class SystemDeletionAndKeyRevocationTests {
     }
 
     @Test
-    void revokingAnAlreadyRevokedKeyIsRejected() throws Exception {
+    void deletingAnAlreadyRevokedKeyHardDeletesIt() throws Exception {
         String adminToken = registerVerifiedAdmin();
         long systemId = createSystem(adminToken, "sys-double-revoke");
         long keyId = generateKeyAndGetId(adminToken, systemId);
@@ -107,7 +107,14 @@ class SystemDeletionAndKeyRevocationTests {
         mockMvc.perform(delete("/api/keys/" + keyId).header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isNoContent());
         mockMvc.perform(delete("/api/keys/" + keyId).header("Authorization", "Bearer " + adminToken))
-                .andExpect(status().isConflict());
+                .andExpect(status().isNoContent());
+
+        MvcResult listResult = mockMvc.perform(get("/api/keys").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk()).andReturn();
+        JsonNode keys = objectMapper.readTree(listResult.getResponse().getContentAsString());
+        for (JsonNode key : keys) {
+            assertThat(key.get("id").asLong()).isNotEqualTo(keyId);
+        }
     }
 
     @Test

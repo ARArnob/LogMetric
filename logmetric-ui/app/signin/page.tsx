@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, ArrowRight, Loader2 } from "lucide-react";
@@ -10,7 +10,13 @@ import { useAuth } from "../lib/auth";
 
 export default function SignIn() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, token, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && token) {
+      router.replace("/dashboard");
+    }
+  }, [loading, token, router]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

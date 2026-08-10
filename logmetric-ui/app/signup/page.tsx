@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AlertCircle, ArrowRight, Loader2, UserPlus } from "lucide-react";
 import AuthLayout from "../components/AuthLayout";
 import { ApiError, ValidationError, register as registerApi, registerWithInvite } from "../lib/api";
+import { useAuth } from "../lib/auth";
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
@@ -19,6 +20,13 @@ function FieldError({ message }: { message?: string }) {
 function SignUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { token, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && token) {
+      router.replace("/dashboard");
+    }
+  }, [loading, token, router]);
 
   const [joinMode, setJoinMode] = useState(false);
   const [organizationName, setOrganizationName] = useState("");

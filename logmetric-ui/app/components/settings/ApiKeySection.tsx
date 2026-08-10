@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Key, AlertTriangle, Ban } from "lucide-react";
+import { Key, AlertTriangle, Ban, Trash } from "lucide-react";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import CopyButton from "../ui/CopyButton";
 import Badge from "../ui/Badge";
 import Select from "../ui/Select";
-import { ApiKeyInfo, SystemInfo, API_BASE_URL, generateApiKey, listApiKeys, revokeApiKey } from "../../lib/api";
+import { ApiKeyInfo, SystemInfo, API_BASE_URL, generateApiKey, listApiKeys, revokeApiKey, deleteApiKey } from "../../lib/api";
 import { useToast } from "../../lib/toast";
 
 function formatCreatedAt(iso: string): string {
@@ -24,6 +24,8 @@ export default function ApiKeySection({ isAdmin, systems }: { isAdmin: boolean; 
   const [selectedSystemId, setSelectedSystemId] = useState<string | null>(null);
   const [pendingRevoke, setPendingRevoke] = useState<ApiKeyInfo | null>(null);
   const [revoking, setRevoking] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<ApiKeyInfo | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const toast = useToast();
 
   // Default to the first system once the list loads, but don't fight a
@@ -87,6 +89,21 @@ export default function ApiKeySection({ isAdmin, systems }: { isAdmin: boolean; 
     } finally {
       setPendingRevoke(null);
       setRevoking(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await deleteApiKey(pendingDelete.id);
+      toast.success("Key deleted");
+      refreshKeys();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't delete the key");
+    } finally {
+      setPendingDelete(null);
+      setDeleting(false);
     }
   }
 
@@ -222,6 +239,17 @@ export default function ApiKeySection({ isAdmin, systems }: { isAdmin: boolean; 
                       Revoke
                     </button>
                   )}
+                  {k.revoked && (
+                    <button
+                      className="btn btn-ghost"
+                      style={{ fontSize: 12, padding: "4px 8px", color: "var(--sev-error-text)" }}
+                      onClick={() => setPendingDelete(k)}
+                      aria-label={`Delete key ${k.maskedHint}`}
+                    >
+                      <Trash className="w-3.5 h-3.5" />
+                      Delete
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
@@ -257,6 +285,21 @@ export default function ApiKeySection({ isAdmin, systems }: { isAdmin: boolean; 
             : ""
         }
         confirmLabel="Revoke"
+      />
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+        danger
+        title="Delete this key?"
+        message={
+          pendingDelete
+            ? `Are you sure you want to completely delete "${pendingDelete.maskedHint}"? This will remove it from your audit history permanently.`
+            : ""
+        }
+        confirmLabel="Delete"
       />
     </div>
   );

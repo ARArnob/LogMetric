@@ -51,10 +51,12 @@ public class ApiKeyController {
         return ResponseEntity.ok(keys);
     }
 
-    // Soft revoke, not a row delete -- ApiKeyService.validateKey() already
-    // rejects a revoked key, and keeping the row preserves "who generated
-    // this, when" for the audit trail. This is also what unblocks deleting a
-    // system whose only keys are now revoked (SystemController.deleteSystem).
+    // First call soft-revokes (ApiKeyService.validateKey() already rejects a
+    // revoked key, and keeping the row preserves "who generated this, when"
+    // for the audit trail -- this is also what unblocks deleting a system
+    // whose only keys are now revoked, see SystemController.deleteSystem).
+    // A second call on an already-revoked key hard-deletes the row, since at
+    // that point the audit trail no longer needs it.
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('ADMIN')")
     public ResponseEntity<Void> revokeKey(@PathVariable Long id) {
@@ -65,7 +67,10 @@ public class ApiKeyController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Key not found"));
 
         if (apiKey.isRevoked()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This key is already revoked");
+            apiKeyRepository.delete(apiKey);
+            auditLogService.record(orgId, AuthUtils.requireUser(authentication).getEmail(),
+                    AuditAction.KEY_DELETED, apiKey.getKeyPrefix() + "…");
+            return ResponseEntity.noContent().build();
         }
 
         apiKey.setRevoked(true);
