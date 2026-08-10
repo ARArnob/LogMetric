@@ -402,7 +402,16 @@ input::placeholder { color: var(--text-muted); }
   from { opacity: 0; transform: translateY(22px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.animate-fade-up { animation: fadeUp 0.65s cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* fill-mode is "backwards", not "both" -- holding the "to" keyframe's
+   transform after the animation ends would leave translateY(0) on the
+   element indefinitely, and any non-"none" transform (even a no-op one)
+   establishes a stacking context. That trapped z-indexed overlays (e.g.
+   TimeRangePicker's dropdown) inside whichever fade-up ancestor wrapped
+   them, so a later-in-DOM fade-up card could paint on top and block
+   clicks. "backwards" still applies the hidden "from" state during the
+   animation-delay window (no flash-of-content), it just doesn't pin the
+   transform in place once the animation is done. */
+.animate-fade-up { animation: fadeUp 0.65s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
 .d1 { animation-delay: 0.06s; }
 .d2 { animation-delay: 0.12s; }
 .d3 { animation-delay: 0.18s; }
