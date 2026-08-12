@@ -17,6 +17,17 @@ const INTERVAL_LABEL: Record<string, string> = {
   week: "events / week",
 };
 
+// Fallback bucket width when there's only one bucket to diff against (so no
+// b[1] - b[0] to measure). Must key off the *actual* interval the backend
+// reported -- a week-bucketed single bar defaulting to a hardcoded 1 hour
+// made an "All time" range's footer show a fabricated 1-hour window.
+const INTERVAL_MS: Record<string, number> = {
+  minute: 60_000,
+  hour: 3_600_000,
+  day: 86_400_000,
+  week: 7 * 86_400_000,
+};
+
 // Below this rendered width per slot, bars stop reading as bars and start
 // reading as speckled noise -- merge buckets instead of letting them shrink.
 const MIN_SLOT_PX = 14;
@@ -101,7 +112,7 @@ export default function VolumeHistogram({
       if (dragStart !== null && dragEnd !== null && dragStart !== dragEnd && onBrush) {
         const lo = Math.min(dragStart, dragEnd);
         const hi = Math.max(dragStart, dragEnd);
-        const bucketMs = displayBuckets.length > 1 ? displayBuckets[1].timestamp - displayBuckets[0].timestamp : 3_600_000;
+        const bucketMs = displayBuckets.length > 1 ? displayBuckets[1].timestamp - displayBuckets[0].timestamp : (INTERVAL_MS[interval] ?? 3_600_000);
         onBrush(displayBuckets[lo].timestamp, displayBuckets[hi].timestamp + bucketMs);
       }
       setDragStart(null);
@@ -109,7 +120,7 @@ export default function VolumeHistogram({
     }
     document.addEventListener("mouseup", onMouseUp);
     return () => document.removeEventListener("mouseup", onMouseUp);
-  }, [dragging, dragStart, dragEnd, displayBuckets, onBrush]);
+  }, [dragging, dragStart, dragEnd, displayBuckets, onBrush, interval]);
 
   if (!buckets.length) {
     return (
@@ -131,9 +142,14 @@ export default function VolumeHistogram({
 
   const active = hover !== null ? displayBuckets[hover] : null;
   const mergedSpanMs = merged && displayBuckets.length > 1 ? displayBuckets[1].timestamp - displayBuckets[0].timestamp : null;
-  const bucketMs = displayBuckets.length > 1 ? displayBuckets[1].timestamp - displayBuckets[0].timestamp : 3_600_000;
+  const bucketMs = displayBuckets.length > 1 ? displayBuckets[1].timestamp - displayBuckets[0].timestamp : (INTERVAL_MS[interval] ?? 3_600_000);
   const minMs = displayBuckets[0].timestamp;
-  const maxMs = displayBuckets[displayBuckets.length - 1].timestamp + bucketMs;
+  // The backend only returns buckets that actually contain data, so the last
+  // bucket's *nominal* end (start + full interval width) can land in the
+  // future -- e.g. "All time" collapses to one real week-wide bucket when
+  // all data is from this morning, and start-of-week + 1 week is days from
+  // now. Never claim the chart has data past the present moment.
+  const maxMs = Math.min(displayBuckets[displayBuckets.length - 1].timestamp + bucketMs, Date.now());
   const totalSpan = maxMs - minMs;
 
   return (
@@ -268,13 +284,15 @@ export default function VolumeHistogram({
         })}
       </div>
 
-      {/* Time range footer */}
+      {/* Time range footer -- uses minMs/maxMs (bucket end, not bucket start)
+          rather than the raw first/last bucket timestamps, otherwise a
+          single-bucket chart shows the same instant twice on both sides. */}
       <div className="flex justify-between mt-1.5">
         <span className="text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>
-          {fmt(displayBuckets[0].timestamp)}
+          {fmt(minMs)}
         </span>
         <span className="text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>
-          {fmt(displayBuckets[displayBuckets.length - 1].timestamp)}
+          {fmt(maxMs)}
         </span>
       </div>
 
@@ -325,9 +343,9 @@ function fmt(ts: number): string {
   return new Date(ts).toLocaleString([], {
     month: "short",
     day: "numeric",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
   });
 }
 
@@ -335,8 +353,8 @@ function fmtFull(ts: number): string {
   return new Date(ts).toLocaleString([], {
     month: "short",
     day: "numeric",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
   });
 }

@@ -15,15 +15,31 @@ import { useAuth } from "./auth";
 const KEYWORD_DEBOUNCE_MS = 300;
 const HOUR_MS = 3600_000;
 
+/** Mirrors LogSearchService#resolveHistogramResolution so the demo-mode chart
+ * scales its bucket width to the selected range the same way real data does
+ * (previously demo mode always reported "hour" no matter what range was picked). */
+const INTERVAL_MS = { minute: 60_000, hour: HOUR_MS, day: 24 * HOUR_MS, week: 7 * 24 * HOUR_MS } as const;
+type DemoInterval = keyof typeof INTERVAL_MS;
+
+function resolveDemoInterval(startDate?: number, endDate?: number): DemoInterval {
+  if (startDate == null) return "week";
+  const spanMs = (endDate ?? Date.now()) - startDate;
+  if (spanMs <= 3 * HOUR_MS) return "minute";
+  if (spanMs <= 3 * 24 * HOUR_MS) return "hour";
+  if (spanMs <= 60 * 24 * HOUR_MS) return "day";
+  return "week";
+}
+
 function emptyResponse(): LogSearchResponse {
   return { logs: [], total: 0, histogram: [], severityDistribution: [], serviceNames: [], patternClusters: [], histogramInterval: "hour" };
 }
 
-/** Groups demo logs into hourly buckets, same shape the API's date histogram returns. */
-function bucketizeDemo(logs: LogSearchResponse["logs"]): HistogramBucket[] {
+/** Groups demo logs into buckets of the given interval, same shape the API's date histogram returns. */
+function bucketizeDemo(logs: LogSearchResponse["logs"], interval: DemoInterval): HistogramBucket[] {
+  const bucketMs = INTERVAL_MS[interval];
   const map = new Map<number, HistogramBucket>();
   for (const l of logs) {
-    const t = Math.floor(new Date(l.timestamp).getTime() / HOUR_MS) * HOUR_MS;
+    const t = Math.floor(new Date(l.timestamp).getTime() / bucketMs) * bucketMs;
     if (!map.has(t)) map.set(t, { timestamp: t, count: 0, levels: {} });
     const bucket = map.get(t)!;
     bucket.count += 1;
@@ -33,13 +49,13 @@ function bucketizeDemo(logs: LogSearchResponse["logs"]): HistogramBucket[] {
 
   const arr = [...map.values()].sort((a, b) => a.timestamp - b.timestamp);
   // Demo logs span only a few seconds, so they'd otherwise collapse into a
-  // single bucket -- spread them across synthetic hourly slots so the chart
-  // still reads as a time series instead of one tall bar.
+  // single bucket -- spread them across synthetic slots (at the resolved
+  // interval's width) so the chart still reads as a time series.
   if (arr.length === 1) {
     const base = arr[0].timestamp;
     return logs.reduce<HistogramBucket[]>((acc, l, i) => {
       const idx = Math.floor((i / logs.length) * 12);
-      acc[idx] ??= { timestamp: base - (11 - idx) * HOUR_MS, count: 0, levels: {} };
+      acc[idx] ??= { timestamp: base - (11 - idx) * bucketMs, count: 0, levels: {} };
       acc[idx].count += 1;
       const level = l.level.toUpperCase();
       acc[idx].levels[level] = (acc[idx].levels[level] ?? 0) + 1;
@@ -50,7 +66,7 @@ function bucketizeDemo(logs: LogSearchResponse["logs"]): HistogramBucket[] {
 }
 
 /** Shapes synthetic demo data into the same response the real API returns, so every consumer has one code path regardless of mode. */
-function demoResponse(size: number): LogSearchResponse {
+function demoResponse(size: number, startDate?: number, endDate?: number): LogSearchResponse {
   const logs = fetchDemoLogs(size);
   const severity = new Map<string, number>();
   const services = new Map<string, number>();
@@ -61,14 +77,16 @@ function demoResponse(size: number): LogSearchResponse {
     services.set(l.serviceName, (services.get(l.serviceName) ?? 0) + 1);
   }
 
+  const interval = resolveDemoInterval(startDate, endDate);
+
   return {
     logs,
     total: logs.length,
-    histogram: bucketizeDemo(logs),
+    histogram: bucketizeDemo(logs, interval),
     severityDistribution: [...severity].map(([level, count]) => ({ level, count })),
     serviceNames: [...services].map(([name, count]) => ({ name, count })),
     patternClusters: [],
-    histogramInterval: "hour",
+    histogramInterval: interval,
   };
 }
 
@@ -111,7 +129,7 @@ export function useLogSearch(
   const run = useCallback(
     async (nextFilters: LogSearchRequest) => {
       if (demoView) {
-        setData(demoResponse(nextFilters.size ?? 60));
+        setData(demoResponse(nextFilters.size ?? 60, nextFilters.startDate, nextFilters.endDate));
         setError(null);
         setLoading(false);
         hasLoadedRef.current = true;
