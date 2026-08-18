@@ -22,6 +22,7 @@ import ThemeToggle from "./ThemeToggle";
 import CommandPalette from "./CommandPalette";
 import { useAuth } from "../lib/auth";
 import { commandPaletteOpenStore } from "../lib/commandPaletteStore";
+import PresenceIndicator from "../supabase/PresenceIndicator";
 
 interface NavItem {
   href: string;
@@ -206,6 +207,7 @@ export default function AppShell({
           </div>
 
           <div className="flex items-center gap-2">
+            <PresenceIndicator />
             <button
               onClick={() => commandPaletteOpenStore.set(true)}
               className="btn btn-quiet"
